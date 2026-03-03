@@ -1,0 +1,173 @@
+{
+  "projectType": "saas",
+  "projectName": "Orquestra",
+  "projectDescription": "Transform Solana Anchor IDLs into production-ready REST APIs instantly",
+  "theme": "aspen",
+  "primaryColor": "#9945FF",
+  "lightColor": "#14F195",
+  "darkColor": "#512DA8",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/how-it-works",
+              "concepts/idl-parsing",
+              "concepts/transaction-building",
+              "concepts/authentication"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/uploading-idl",
+              "guides/building-transactions",
+              "guides/api-keys",
+              "guides/ai-documentation"
+            ]
+          },
+          {
+            "group": "CLI Tool",
+            "pages": [
+              "cli/overview",
+              "cli/scanning-programs",
+              "cli/checking-idl"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/overview",
+              "deployment/cloudflare",
+              "deployment/environment-variables",
+              "deployment/database-migrations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "IDL Management",
+            "pages": [
+              "api/idl/upload",
+              "api/idl/retrieve",
+              "api/idl/update",
+              "api/idl/delete"
+            ]
+          },
+          {
+            "group": "Project API",
+            "pages": [
+              "api/projects/list",
+              "api/projects/get",
+              "api/projects/instructions",
+              "api/projects/accounts",
+              "api/projects/errors",
+              "api/projects/types"
+            ]
+          },
+          {
+            "group": "Transaction Building",
+            "pages": [
+              "api/transactions/build",
+              "api/transactions/pda"
+            ]
+          },
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/github-oauth",
+              "api/auth/jwt",
+              "api/auth/api-keys"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Setup",
+            "pages": [
+              "development/local-setup",
+              "development/project-structure",
+              "development/database-schema"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "development/architecture",
+              "development/frontend",
+              "development/backend",
+              "development/security"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "development/contributing",
+              "development/code-style",
+              "development/testing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Smart IDL parsing with Anchor v0.29+ support",
+    "Auto-generated REST endpoints for all instructions and accounts",
+    "Base58-encoded transaction builder",
+    "AI-optimized Markdown documentation",
+    "GitHub OAuth authentication",
+    "Dashboard for project and API key management",
+    "Public explorer for browsing projects",
+    "CLI tools for on-chain program discovery",
+    "Real-time API regeneration on IDL updates",
+    "Cloudflare edge deployment"
+  ],
+  "publicApiSurface": [
+    "POST /api/idl/upload - Upload new IDL",
+    "GET /api/idl/:projectId - Retrieve IDL",
+    "PUT /api/idl/:projectId - Update IDL version",
+    "DELETE /api/idl/:projectId - Delete project",
+    "GET /api/projects - List all projects",
+    "GET /api/:projectId/instructions - List all instructions",
+    "GET /api/:projectId/instructions/:name - Get instruction details",
+    "POST /api/:projectId/instructions/:name/build - Build transaction",
+    "GET /api/:projectId/accounts - List account types",
+    "GET /api/:projectId/accounts/:name - Get account schema",
+    "GET /api/:projectId/errors - List error codes",
+    "GET /api/:projectId/events - List program events",
+    "GET /api/:projectId/types - List custom types",
+    "GET /api/:projectId/docs - AI-ready Markdown docs",
+    "GET /api/:projectId/idl - Raw IDL JSON",
+    "GET /auth/github - Initiate GitHub OAuth",
+    "POST /auth/github/callback - Handle OAuth callback",
+    "POST /auth/logout - User logout",
+    "GET /health - System health check",
+    "orquestra-scan scan - CLI: Scan all programs on-chain",
+    "orquestra-scan check-idl - CLI: Check IDL availability"
+  ]
+}
