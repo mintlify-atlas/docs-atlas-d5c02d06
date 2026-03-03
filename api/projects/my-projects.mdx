@@ -1,0 +1,179 @@
+---
+title: My projects
+description: List projects owned by the authenticated user
+icon: user
+---
+
+# My projects
+
+Retrieve all projects owned by the authenticated user, including both public and private projects.
+
+## Endpoint
+
+```
+GET /api/projects/mine
+```
+
+## Authentication
+
+Requires JWT authentication.
+
+## Query Parameters
+
+<ParamField query="page" type="number" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="limit" type="number" default="20">
+  Number of projects per page (max 100)
+</ParamField>
+
+## Response
+
+<ResponseField name="projects" type="array">
+  Array of project objects
+  
+  <Expandable title="Project object">
+    <ResponseField name="id" type="string">
+      Project unique identifier
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Project name
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      Project description
+    </ResponseField>
+    
+    <ResponseField name="programId" type="string">
+      Solana program ID
+    </ResponseField>
+    
+    <ResponseField name="isPublic" type="boolean">
+      Whether the project is publicly visible
+    </ResponseField>
+    
+    <ResponseField name="currentVersion" type="number">
+      Latest IDL version number
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata
+  
+  <Expandable title="Pagination fields">
+    <ResponseField name="page" type="number">
+      Current page number
+    </ResponseField>
+    
+    <ResponseField name="limit" type="number">
+      Items per page
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of projects
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+```bash cURL
+curl https://api.orquestra.dev/api/projects/mine \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.orquestra.dev/api/projects/mine', {
+  headers: {
+    'Authorization': `Bearer ${JWT_TOKEN}`
+  }
+});
+
+const data = await response.json();
+console.log(data.projects);
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'https://api.orquestra.dev/api/projects/mine',
+    headers={'Authorization': f'Bearer {JWT_TOKEN}'}
+)
+
+projects = response.json()['projects']
+```
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "projects": [
+    {
+      "id": "abc123",
+      "name": "Token Swap Program",
+      "description": "DEX token swap protocol",
+      "programId": "TokenSwap11111111111111111111111111111111",
+      "isPublic": true,
+      "currentVersion": 3,
+      "createdAt": "2024-03-01T10:00:00.000Z",
+      "updatedAt": "2024-03-15T14:30:00.000Z"
+    },
+    {
+      "id": "def456",
+      "name": "NFT Marketplace",
+      "description": "NFT trading platform",
+      "programId": "NFTMarket1111111111111111111111111111111",
+      "isPublic": false,
+      "currentVersion": 1,
+      "createdAt": "2024-03-10T12:00:00.000Z",
+      "updatedAt": "2024-03-10T12:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 2
+  }
+}
+```
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Dashboard view">
+    Display all user projects in the dashboard for quick access and management.
+  </Accordion>
+  
+  <Accordion title="Project management">
+    List projects to select one for updating, deleting, or viewing details.
+  </Accordion>
+  
+  <Accordion title="Export data">
+    Export user's project metadata for backup or migration purposes.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="List all projects" icon="list" href="/api/projects/list">
+    Browse public projects from all users
+  </Card>
+  <Card title="Get project details" icon="folder" href="/api/projects/get">
+    Retrieve detailed information about a specific project
+  </Card>
+</CardGroup>

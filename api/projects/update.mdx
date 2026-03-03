@@ -1,0 +1,148 @@
+---
+title: Update project
+description: Update project metadata and settings
+icon: pen
+---
+
+# Update project
+
+Update a project's metadata including name, description, visibility, and social links.
+
+## Endpoint
+
+```
+PUT /api/projects/:projectId
+```
+
+## Authentication
+
+Requires JWT authentication. Only the project owner can update their project.
+
+## Path Parameters
+
+<ParamField path="projectId" type="string" required>
+  The unique identifier of the project to update
+</ParamField>
+
+## Request Body
+
+<ParamField body="name" type="string">
+  New project name
+</ParamField>
+
+<ParamField body="description" type="string">
+  New project description
+</ParamField>
+
+<ParamField body="isPublic" type="boolean">
+  Whether the project should be publicly visible
+</ParamField>
+
+<ParamField body="websiteUrl" type="string">
+  Project website URL
+</ParamField>
+
+<ParamField body="githubUrl" type="string">
+  GitHub repository URL
+</ParamField>
+
+<ParamField body="twitterUrl" type="string">
+  Twitter/X profile URL
+</ParamField>
+
+<ParamField body="discordUrl" type="string">
+  Discord server invite URL
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Whether the update was successful
+</ResponseField>
+
+<ResponseField name="project" type="object">
+  Updated project object
+  
+  <Expandable title="Project fields">
+    <ResponseField name="id" type="string">
+      Project ID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Project name
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      Project description
+    </ResponseField>
+    
+    <ResponseField name="isPublic" type="boolean">
+      Public visibility status
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+```bash cURL
+curl -X PUT https://api.orquestra.dev/api/projects/abc123 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Updated Project",
+    "description": "An improved description",
+    "isPublic": true,
+    "websiteUrl": "https://myproject.com",
+    "githubUrl": "https://github.com/user/project"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.orquestra.dev/api/projects/abc123', {
+  method: 'PUT',
+  headers: {
+    'Authorization': `Bearer ${JWT_TOKEN}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'My Updated Project',
+    description: 'An improved description',
+    isPublic: true,
+    websiteUrl: 'https://myproject.com'
+  })
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+## Error Responses
+
+<AccordionGroup>
+  <Accordion title="401 Unauthorized">
+    Missing or invalid JWT token
+  </Accordion>
+  
+  <Accordion title="403 Forbidden">
+    User is not the project owner
+  </Accordion>
+  
+  <Accordion title="404 Not Found">
+    Project does not exist
+  </Accordion>
+  
+  <Accordion title="422 Unprocessable Entity">
+    Invalid request data (e.g., invalid URL format)
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<Card title="Delete project" icon="trash" href="/api/idl/delete">
+  Learn how to delete a project
+</Card>

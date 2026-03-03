@@ -92,7 +92,9 @@
             "group": "Project API",
             "pages": [
               "api/projects/list",
+              "api/projects/my-projects",
               "api/projects/get",
+              "api/projects/update",
               "api/projects/instructions",
               "api/projects/accounts",
               "api/projects/errors",
