@@ -1,0 +1,373 @@
+---
+title: 'Project Accounts'
+api: 'GET /api/:projectId/accounts'
+description: 'List account types and get account schemas from a program IDL'
+---
+
+## Overview
+
+Accounts represent the on-chain data structures stored by your Solana program. These endpoints allow you to retrieve the complete schema for all account types defined in the program's IDL.
+
+## List All Accounts
+
+<CodeGroup>
+```bash Endpoint
+GET /api/:projectId/accounts
+```
+</CodeGroup>
+
+Retrieve all account type definitions from the program's IDL, including their fields and discriminators.
+
+### Path Parameters
+
+<ParamField path="projectId" type="string" required>
+  The unique identifier of the project
+</ParamField>
+
+### Response
+
+<ResponseField name="projectId" type="string">
+  The project identifier
+</ResponseField>
+
+<ResponseField name="programName" type="string">
+  Name of the Anchor program from the IDL
+</ResponseField>
+
+<ResponseField name="accounts" type="array">
+  List of account type definitions
+  
+  <Expandable title="Account Object">
+    <ResponseField name="name" type="string">
+      Account type name (PascalCase)
+    </ResponseField>
+    
+    <ResponseField name="kind" type="string">
+      Account kind, typically "struct"
+    </ResponseField>
+    
+    <ResponseField name="docs" type="array">
+      Documentation strings from the IDL
+    </ResponseField>
+    
+    <ResponseField name="discriminator" type="array">
+      8-byte discriminator array used by Anchor to identify this account type
+    </ResponseField>
+    
+    <ResponseField name="fields" type="array">
+      Account fields defining the data structure
+      
+      <Expandable title="Field">
+        <ResponseField name="name" type="string">
+          Field name
+        </ResponseField>
+        
+        <ResponseField name="type" type="string">
+          Type representation (e.g., "publicKey", "u64", "string", "vec\<u8\>")
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.orquestra.so/api/proj_abc123/accounts"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.orquestra.so/api/proj_abc123/accounts');
+const data = await response.json();
+console.log(data.accounts);
+```
+
+```python Python
+import requests
+
+response = requests.get('https://api.orquestra.so/api/proj_abc123/accounts')
+data = response.json()
+print(data['accounts'])
+```
+</CodeGroup>
+
+## Example Response
+
+```json
+{
+  "projectId": "proj_abc123",
+  "programName": "token_swap",
+  "accounts": [
+    {
+      "name": "Pool",
+      "kind": "struct",
+      "docs": [
+        "Token swap pool account",
+        "Stores liquidity and swap configuration"
+      ],
+      "discriminator": [241, 154, 109, 4, 17, 177, 109, 188],
+      "fields": [
+        {
+          "name": "authority",
+          "type": "publicKey"
+        },
+        {
+          "name": "tokenA",
+          "type": "publicKey"
+        },
+        {
+          "name": "tokenB",
+          "type": "publicKey"
+        },
+        {
+          "name": "reserveA",
+          "type": "u64"
+        },
+        {
+          "name": "reserveB",
+          "type": "u64"
+        },
+        {
+          "name": "fee",
+          "type": "u16"
+        },
+        {
+          "name": "minLiquidity",
+          "type": "u64"
+        },
+        {
+          "name": "maxSlippage",
+          "type": "u16"
+        },
+        {
+          "name": "paused",
+          "type": "bool"
+        },
+        {
+          "name": "createdAt",
+          "type": "i64"
+        },
+        {
+          "name": "updatedAt",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "UserPosition",
+      "kind": "struct",
+      "docs": [
+        "User liquidity position"
+      ],
+      "discriminator": [45, 78, 201, 123, 88, 34, 190, 77],
+      "fields": [
+        {
+          "name": "owner",
+          "type": "publicKey"
+        },
+        {
+          "name": "pool",
+          "type": "publicKey"
+        },
+        {
+          "name": "liquidity",
+          "type": "u64"
+        },
+        {
+          "name": "depositedA",
+          "type": "u64"
+        },
+        {
+          "name": "depositedB",
+          "type": "u64"
+        },
+        {
+          "name": "lastDepositAt",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "GlobalConfig",
+      "kind": "struct",
+      "docs": [
+        "Global program configuration"
+      ],
+      "discriminator": [89, 12, 45, 234, 156, 78, 91, 200],
+      "fields": [
+        {
+          "name": "admin",
+          "type": "publicKey"
+        },
+        {
+          "name": "treasuryFee",
+          "type": "u16"
+        },
+        {
+          "name": "treasury",
+          "type": "publicKey"
+        },
+        {
+          "name": "paused",
+          "type": "bool"
+        },
+        {
+          "name": "minPoolLiquidity",
+          "type": "u64"
+        },
+        {
+          "name": "maxPoolCount",
+          "type": "u32"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Understanding Account Discriminators
+
+Anchor programs use 8-byte discriminators to identify account types. The discriminator is stored as the first 8 bytes of the account data and is derived from a hash of the account type name.
+
+<CodeGroup>
+```javascript Checking Account Type
+import { AccountInfo } from '@solana/web3.js';
+
+// Pool account discriminator
+const POOL_DISCRIMINATOR = [241, 154, 109, 4, 17, 177, 109, 188];
+
+function isPoolAccount(accountInfo: AccountInfo<Buffer>): boolean {
+  const discriminator = accountInfo.data.slice(0, 8);
+  return discriminator.equals(Buffer.from(POOL_DISCRIMINATOR));
+}
+```
+
+```rust Rust (Anchor)
+#[account]
+pub struct Pool {
+    pub authority: Pubkey,
+    pub token_a: Pubkey,
+    pub token_b: Pubkey,
+    pub reserve_a: u64,
+    pub reserve_b: u64,
+    pub fee: u16,
+    pub min_liquidity: u64,
+    pub max_slippage: u16,
+    pub paused: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+```
+</CodeGroup>
+
+## Deserializing Account Data
+
+Once you've identified an account type using its discriminator, you can deserialize the remaining data according to the field schema.
+
+<CodeGroup>
+```javascript Using Anchor
+import { Program } from '@project-serum/anchor';
+import { Connection, PublicKey } from '@solana/web3.js';
+
+// Fetch and deserialize a Pool account
+const connection = new Connection('https://api.mainnet-beta.solana.com');
+const poolAddress = new PublicKey('...');
+
+const poolAccount = await program.account.pool.fetch(poolAddress);
+console.log('Reserve A:', poolAccount.reserveA.toString());
+console.log('Reserve B:', poolAccount.reserveB.toString());
+```
+
+```javascript Manual Deserialization
+import { Connection, PublicKey } from '@solana/web3.js';
+import * as borsh from 'borsh';
+
+// Define the schema matching the account fields
+class Pool {
+  authority: Uint8Array;
+  tokenA: Uint8Array;
+  tokenB: Uint8Array;
+  reserveA: bigint;
+  reserveB: bigint;
+  fee: number;
+  minLiquidity: bigint;
+  maxSlippage: number;
+  paused: boolean;
+  createdAt: bigint;
+  updatedAt: bigint;
+}
+
+const poolSchema = new Map([
+  [
+    Pool,
+    {
+      kind: 'struct',
+      fields: [
+        ['authority', [32]],
+        ['tokenA', [32]],
+        ['tokenB', [32]],
+        ['reserveA', 'u64'],
+        ['reserveB', 'u64'],
+        ['fee', 'u16'],
+        ['minLiquidity', 'u64'],
+        ['maxSlippage', 'u16'],
+        ['paused', 'u8'],
+        ['createdAt', 'i64'],
+        ['updatedAt', 'i64'],
+      ],
+    },
+  ],
+]);
+
+const connection = new Connection('https://api.mainnet-beta.solana.com');
+const poolAddress = new PublicKey('...');
+const accountInfo = await connection.getAccountInfo(poolAddress);
+
+// Skip the 8-byte discriminator
+const data = accountInfo.data.slice(8);
+const pool = borsh.deserialize(poolSchema, Pool, data);
+```
+</CodeGroup>
+
+## Error Responses
+
+<AccordionGroup>
+  <Accordion title="404 Not Found">
+    ```json
+    {
+      "error": "Project not found or not public"
+    }
+    ```
+    
+    The specified project ID does not exist, is private, or has no IDL uploaded.
+  </Accordion>
+  
+  <Accordion title="500 Internal Server Error">
+    ```json
+    {
+      "error": "Failed to get accounts"
+    }
+    ```
+    
+    The server encountered an error processing the request.
+  </Accordion>
+</AccordionGroup>
+
+## Notes
+
+<Info>
+  **No authentication required** - This endpoint is public for all public projects.
+</Info>
+
+<Tip>
+  Use the discriminator values to filter and identify account types when fetching accounts using `getProgramAccounts`.
+</Tip>
+
+<Note>
+  Field types are resolved recursively. Complex types like `vec<CustomStruct>` will show the full type representation including nested structures.
+</Note>
+
+<Warning>
+  Account data size is determined by the sum of all field sizes plus the 8-byte discriminator. Ensure your rent calculations account for the full data size.
+</Warning>

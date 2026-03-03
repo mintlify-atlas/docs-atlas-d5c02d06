@@ -1,0 +1,152 @@
+---
+title: Deployment Overview
+description: Deploy Orquestra to Cloudflare Workers and Pages with automated CI/CD
+---
+
+## Architecture
+
+Orquestra uses a modern serverless architecture built on Cloudflare's edge platform:
+
+- **Cloudflare Workers** - API backend (Hono framework)
+- **Cloudflare Pages** - Frontend application (React + Vite)
+- **D1 Database** - SQLite database for users, projects, and IDL versions
+- **KV Namespaces** - Key-value storage for IDL files and caching
+
+## Deployment Methods
+
+### Automated Deployment (Recommended)
+
+Push to your repository to trigger automatic deployment via GitHub Actions:
+
+- **`main` branch** → Production deployment
+- **`develop` branch** → Development deployment
+- **Pull requests** → Run tests and type checking
+
+The CI/CD pipeline automatically:
+1. Runs linting and type checking
+2. Executes test suite
+3. Builds all packages
+4. Deploys Worker (API backend)
+5. Deploys Pages (frontend)
+6. Performs health checks
+
+### Manual Deployment
+
+Deploy manually using npm scripts:
+
+```bash
+# Deploy everything (worker + pages)
+npm run deploy
+
+# Deploy only the worker
+npm run deploy:worker
+
+# Deploy only the frontend
+npm run deploy:pages
+```
+
+<Warning>
+Manual deployment requires environment variables and secrets to be configured in `wrangler.toml` and Cloudflare.
+</Warning>
+
+## CI/CD with GitHub Actions
+
+### Workflow Configuration
+
+The `.github/workflows/ci-cd.yml` file defines the deployment pipeline:
+
+```yaml
+deploy-production:
+  name: Deploy to Production
+  runs-on: ubuntu-latest
+  needs: [lint, test, build]
+  if: github.ref == 'refs/heads/main'
+  environment: production
+  steps:
+    - name: Deploy Worker to production
+      run: bunx wrangler deploy --env production
+    
+    - name: Deploy Pages to production
+      run: bunx wrangler pages deploy packages/frontend/dist
+```
+
+### Required GitHub Secrets
+
+Configure these secrets in your GitHub repository settings:
+
+| Secret | Description |
+|--------|-------------|
+| `CLOUDFLARE_API_TOKEN` | API token with Workers and Pages permissions |
+| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID |
+
+<Steps>
+  <Step title="Create API Token">
+    Go to Cloudflare Dashboard → My Profile → API Tokens → Create Token
+  </Step>
+  
+  <Step title="Add Token Permissions">
+    Grant permissions:
+    - Account: Cloudflare Pages (Edit)
+    - Account: Account Settings (Read)
+    - Zone: Workers Routes (Edit)
+    - Account: Workers Scripts (Edit)
+  </Step>
+  
+  <Step title="Add to GitHub">
+    Add the token to GitHub repository settings → Secrets and variables → Actions
+  </Step>
+</Steps>
+
+## Prerequisites
+
+Before deploying, ensure you have:
+
+- Cloudflare account with Workers and Pages enabled
+- GitHub account with OAuth app configured
+- Node.js 18+ or Bun installed
+- Wrangler CLI installed: `npm install -g wrangler`
+- Authenticated with Cloudflare: `wrangler login`
+
+## Deployment Checklist
+
+- [ ] D1 database created and configured
+- [ ] KV namespaces created (IDLS and CACHE)
+- [ ] GitHub OAuth app created and configured
+- [ ] Environment variables set in `wrangler.toml`
+- [ ] Secrets configured with `wrangler secret put`
+- [ ] Database migrations executed
+- [ ] GitHub Actions secrets configured
+- [ ] DNS records configured (if using custom domain)
+
+## Monitoring Deployments
+
+After deployment, verify everything works:
+
+```bash
+# Check API health
+curl https://api.orquestra.dev/health
+
+# Expected response:
+# {"status":"ok","service":"orquestra-api",...}
+```
+
+Monitor deployments in:
+- **Cloudflare Dashboard** → Workers & Pages
+- **GitHub Actions** → Workflow runs
+- **Wrangler CLI**: `wrangler tail --env production`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Cloudflare Setup" icon="cloud" href="/deployment/cloudflare">
+    Configure Workers, Pages, D1, and KV
+  </Card>
+  
+  <Card title="Environment Variables" icon="key" href="/deployment/environment-variables">
+    Set up required secrets and configuration
+  </Card>
+  
+  <Card title="Database Migrations" icon="database" href="/deployment/database-migrations">
+    Initialize and manage your D1 database
+  </Card>
+</CardGroup>

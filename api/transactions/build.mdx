@@ -1,0 +1,278 @@
+---
+title: 'Build Transaction'
+description: 'Build Solana transactions from IDL instructions'
+---
+
+## Overview
+
+The build transaction endpoint constructs a Solana transaction from an Anchor IDL instruction definition. It handles argument encoding, account validation, and transaction serialization.
+
+## Endpoint
+
+```
+POST /api/:projectId/instructions/:name/build
+```
+
+## Request Body
+
+<ParamField body="accounts" type="object" required>
+  Map of account names to public keys (base58 format)
+  
+  ```json
+  {
+    "user": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+    "systemProgram": "11111111111111111111111111111111"
+  }
+  ```
+</ParamField>
+
+<ParamField body="args" type="object" required>
+  Map of argument names to values. Types are automatically encoded based on the IDL.
+  
+  Supported types:
+  - Primitives: `u8`, `u16`, `u32`, `u64`, `u128`, `i8`, `i16`, `i32`, `i64`, `i128`, `f32`, `f64`, `bool`
+  - Complex: `string`, `publicKey`, `bytes`
+  - Collections: `Vec<T>`, `[T; N]` (fixed-size arrays)
+  - Optional: `Option<T>`
+  - Custom: Defined structs from IDL types
+  
+  ```json
+  {
+    "amount": 1000000,
+    "recipient": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+    "config": {
+      "feeRate": 100,
+      "enabled": true
+    }
+  }
+  ```
+</ParamField>
+
+<ParamField body="feePayer" type="string" required>
+  Public key (base58) of the transaction fee payer
+</ParamField>
+
+<ParamField body="recentBlockhash" type="string">
+  Optional recent blockhash. If not provided, it will be fetched from the RPC.
+</ParamField>
+
+<ParamField body="network" type="string" default="mainnet">
+  Network to use for RPC calls:
+  - `"mainnet"` or `"mainnet-beta"` - Solana mainnet
+  - `"devnet"` - Solana devnet  
+  - Custom RPC URL (e.g., `"https://api.custom-rpc.com"`)
+</ParamField>
+
+## Response
+
+<ResponseField name="transaction" type="string">
+  Base58-encoded serialized transaction message
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable description of the transaction
+</ResponseField>
+
+<ResponseField name="accounts" type="array">
+  List of accounts used in the instruction
+  
+  <Expandable title="Account Object">
+    <ResponseField name="name" type="string">
+      Account name from the IDL
+    </ResponseField>
+    
+    <ResponseField name="pubkey" type="string">
+      Public key (base58)
+    </ResponseField>
+    
+    <ResponseField name="isSigner" type="boolean">
+      Whether this account must sign the transaction
+    </ResponseField>
+    
+    <ResponseField name="isWritable" type="boolean">
+      Whether this account is writable
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="instruction" type="object">
+  Detailed instruction information
+  
+  <Expandable title="Instruction Object">
+    <ResponseField name="name" type="string">
+      Instruction name
+    </ResponseField>
+    
+    <ResponseField name="programId" type="string">
+      Program ID (base58)
+    </ResponseField>
+    
+    <ResponseField name="data" type="string">
+      Hex-encoded instruction data (discriminator + encoded arguments)
+    </ResponseField>
+    
+    <ResponseField name="accounts" type="array">
+      Same as top-level accounts array
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="estimatedFee" type="number">
+  Estimated transaction fee in lamports (typically 5000)
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.orquestra.so/api/my-project/instructions/transfer/build \
+  -H "Content-Type: application/json" \
+  -d '{
+    "accounts": {
+      "from": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+      "to": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+      "systemProgram": "11111111111111111111111111111111"
+    },
+    "args": {
+      "amount": 1000000
+    },
+    "feePayer": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+    "network": "devnet"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.orquestra.so/api/my-project/instructions/transfer/build',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      accounts: {
+        from: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+        to: '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin',
+        systemProgram: '11111111111111111111111111111111'
+      },
+      args: {
+        amount: 1000000
+      },
+      feePayer: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+      network: 'devnet'
+    })
+  }
+);
+
+const data = await response.json();
+console.log(data.transaction);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.orquestra.so/api/my-project/instructions/transfer/build',
+    json={
+        'accounts': {
+            'from': '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+            'to': '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin',
+            'systemProgram': '11111111111111111111111111111111'
+        },
+        'args': {
+            'amount': 1000000
+        },
+        'feePayer': '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+        'network': 'devnet'
+    }
+)
+
+data = response.json()
+print(data['transaction'])
+```
+
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "transaction": "3yZe7d4FVmqPGPKqRLdnKpC...",
+  "message": "Transaction for my_program.transfer",
+  "accounts": [
+    {
+      "name": "from",
+      "pubkey": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+      "isSigner": true,
+      "isWritable": true
+    },
+    {
+      "name": "to",
+      "pubkey": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+      "isSigner": false,
+      "isWritable": true
+    },
+    {
+      "name": "systemProgram",
+      "pubkey": "11111111111111111111111111111111",
+      "isSigner": false,
+      "isWritable": false
+    }
+  ],
+  "instruction": {
+    "name": "transfer",
+    "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "data": "a7b3c4d5e6f7890102030405060708091011121314151617181920",
+    "accounts": [
+      /* same as accounts array above */
+    ]
+  },
+  "estimatedFee": 5000
+}
+```
+
+## Error Responses
+
+<ResponseField name="400 Bad Request">
+  - Missing required fields (`accounts`, `args`, or `feePayer`)
+  - Invalid build request (missing required accounts/arguments)
+  - Invalid public key format
+</ResponseField>
+
+<ResponseField name="404 Not Found">
+  - Project not found or not public
+  - Instruction not found in IDL
+</ResponseField>
+
+<ResponseField name="500 Internal Server Error">
+  - Failed to build transaction
+  - RPC connection error
+</ResponseField>
+
+## Validation
+
+The endpoint performs the following validations:
+
+1. **Account Validation**
+   - All required accounts must be provided
+   - Public keys must be valid base58 (32-44 characters)
+   - Unknown account names are rejected
+
+2. **Argument Validation**
+   - All required arguments must be provided
+   - For defined types (structs), all fields must be present
+   - Type validation based on IDL definitions
+
+3. **Transaction Building**
+   - Instruction discriminator: SHA-256 hash of `"global:<instruction_name>"` (first 8 bytes)
+   - Arguments encoded using Borsh serialization
+   - Recent blockhash fetched if not provided
+
+## Rate Limiting
+
+This endpoint is rate-limited to prevent abuse. See [Rate Limiting](/api/rate-limits) for details.
+
+## Related Endpoints
+
+- [List Instructions](/api/instructions/list) - Get available instructions
+- [Get Instruction Details](/api/instructions/get) - View instruction schema
+- [Derive PDA](/api/transactions/pda) - Calculate Program Derived Addresses

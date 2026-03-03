@@ -1,0 +1,313 @@
+---
+title: 'API Overview'
+description: 'Introduction to the Orquestra REST API for building Solana transactions'
+---
+
+## Base URL
+
+The Orquestra API is available at:
+
+```
+https://api.orquestra.dev
+```
+
+All API endpoints are accessed via HTTPS. The API follows REST principles and returns JSON responses.
+
+## API Routes Structure
+
+The API is organized into the following route groups:
+
+- `/auth/*` - Authentication endpoints (GitHub OAuth, user sessions)
+- `/api/*` - Core API endpoints (projects, instructions, transactions)
+- `/api/idl/*` - IDL management (upload, update, versioning)
+- `/health` - Health check endpoint
+
+## Response Format
+
+All API responses follow a consistent JSON structure:
+
+### Success Response
+
+```json
+{
+  "projectId": "abc123",
+  "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "instructions": [...]
+}
+```
+
+### Error Response
+
+```json
+{
+  "error": "Project not found or not public",
+  "code": "NOT_FOUND",
+  "details": {
+    "projectId": "invalid-id"
+  }
+}
+```
+
+## Standard Error Codes
+
+<ResponseField name="400" type="Bad Request">
+  Invalid request parameters or malformed JSON
+</ResponseField>
+
+<ResponseField name="401" type="Unauthorized">
+  Missing or invalid authentication credentials
+</ResponseField>
+
+<ResponseField name="403" type="Forbidden">
+  Valid authentication but insufficient permissions
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Resource does not exist or is not accessible
+</ResponseField>
+
+<ResponseField name="409" type="Conflict">
+  Resource already exists (e.g., duplicate project)
+</ResponseField>
+
+<ResponseField name="422" type="Validation Error">
+  Request validation failed with detailed error messages
+</ResponseField>
+
+<ResponseField name="429" type="Too Many Requests">
+  Rate limit exceeded. Check `Retry-After` header
+</ResponseField>
+
+<ResponseField name="500" type="Internal Server Error">
+  Server error occurred. Contact support if persistent
+</ResponseField>
+
+## Rate Limiting
+
+The API implements rate limiting to ensure fair usage and system stability. Rate limits are applied per IP address.
+
+### Rate Limit Tiers
+
+<ParamField path="API Endpoints" type="/api/*">
+  **100 requests per minute**
+  
+  Standard rate limit for public API endpoints including project listing, instruction queries, and account information.
+</ParamField>
+
+<ParamField path="Authentication" type="/auth/*">
+  **20 requests per minute**
+  
+  Stricter limit on authentication endpoints to prevent abuse.
+</ParamField>
+
+<ParamField path="IDL Upload" type="/api/idl/upload">
+  **10 requests per minute**
+  
+  Limited rate for IDL uploads to protect storage resources.
+</ParamField>
+
+<ParamField path="Transaction Build" type="/:projectId/instructions/:name/build">
+  **30 requests per minute**
+  
+  Rate limit for transaction building endpoints that interact with Solana RPC.
+</ParamField>
+
+### Rate Limit Headers
+
+All API responses include rate limit information in headers:
+
+```http
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1678901234
+```
+
+<ResponseField name="X-RateLimit-Limit" type="integer">
+  Maximum number of requests allowed in the current window
+</ResponseField>
+
+<ResponseField name="X-RateLimit-Remaining" type="integer">
+  Number of requests remaining in the current window
+</ResponseField>
+
+<ResponseField name="X-RateLimit-Reset" type="integer">
+  Unix timestamp when the rate limit window resets
+</ResponseField>
+
+When rate limited, the API returns a `429 Too Many Requests` response:
+
+```json
+{
+  "error": "Too Many Requests",
+  "message": "Rate limit exceeded. Try again in 45 seconds.",
+  "retryAfter": 45
+}
+```
+
+The `Retry-After` header indicates seconds to wait before retrying.
+
+## Public vs Private Projects
+
+Projects in Orquestra can be either **public** or **private**:
+
+### Public Projects
+
+- Accessible to all users without authentication
+- Listed in public project directory (`GET /api/projects`)
+- IDL and instructions are publicly queryable
+- Documentation is publicly available
+- Transaction building is open to all
+
+### Private Projects
+
+- Only visible to the project owner
+- Require authentication (JWT token) to access
+- Not listed in public project directory
+- Useful for development or proprietary programs
+- Can be made public at any time by the owner
+
+### Access Control Example
+
+Authenticated users see both public and their own private projects:
+
+```bash
+# Without authentication - only public projects
+curl https://api.orquestra.dev/api/projects
+
+# With authentication - public + your private projects
+curl https://api.orquestra.dev/api/projects \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+## CORS Configuration
+
+The API supports Cross-Origin Resource Sharing (CORS) for browser-based applications:
+
+### Allowed Origins
+
+- `https://orquestra.dev` (production)
+- `http://localhost:3000` (local development)
+- `http://localhost:5173` (Vite dev server)
+
+### Allowed Headers
+
+- `Content-Type`
+- `Authorization`
+- `X-API-Key`
+
+### Allowed Methods
+
+- `GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`
+
+### Credentials
+
+Credentials (cookies, authorization headers) are supported for authenticated requests.
+
+## Network Selection
+
+When building transactions, you can specify the Solana network:
+
+<ParamField body="network" type="string" default="mainnet">
+  Solana network or custom RPC URL:
+  
+  - `"mainnet"` or `"mainnet-beta"` - Solana Mainnet
+  - `"devnet"` - Solana Devnet  
+  - Custom RPC URL - e.g., `"https://my-rpc.com"`
+</ParamField>
+
+### Example
+
+```json
+{
+  "accounts": { ... },
+  "args": { ... },
+  "feePayer": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+  "network": "devnet"
+}
+```
+
+## Pagination
+
+List endpoints support pagination with query parameters:
+
+<ParamField query="page" type="integer" default="1">
+  Page number (1-indexed)
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Items per page (max: 100)
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search query to filter results
+</ParamField>
+
+### Pagination Response
+
+```json
+{
+  "projects": [...],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 156,
+    "totalPages": 8
+  }
+}
+```
+
+<ResponseField name="pagination.page" type="integer">
+  Current page number
+</ResponseField>
+
+<ResponseField name="pagination.limit" type="integer">
+  Items per page
+</ResponseField>
+
+<ResponseField name="pagination.total" type="integer">
+  Total number of items across all pages
+</ResponseField>
+
+<ResponseField name="pagination.totalPages" type="integer">
+  Total number of pages
+</ResponseField>
+
+## Caching
+
+The API implements intelligent caching for performance:
+
+- **IDL data** is cached in KV storage for 7 days
+- **Documentation** is cached for 7 days and regenerated when IDL updates
+- **Public API responses** are cached when appropriate
+- Cache is automatically invalidated on updates
+
+## Health Check
+
+Check API availability:
+
+```bash
+curl https://api.orquestra.dev/health
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "timestamp": "2024-03-15T10:30:00.000Z"
+}
+```
+
+## Next Steps
+
+<Card title="Authentication" icon="key" href="/api/authentication">
+  Learn how to authenticate API requests with JWT tokens or API keys
+</Card>
+
+<Card title="Projects" icon="folder" href="/api/projects/list">
+  Explore project management endpoints for organizing your Solana programs
+</Card>
+
+<Card title="Instructions" icon="code" href="/api/projects/instructions">
+  Build and execute Solana transactions with program instructions
+</Card>

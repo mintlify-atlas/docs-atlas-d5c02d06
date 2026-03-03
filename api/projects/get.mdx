@@ -1,0 +1,229 @@
+---
+title: 'Get Project'
+api: 'GET /api/projects/:projectId'
+description: 'Retrieve detailed information about a specific project'
+---
+
+## Overview
+
+Fetch comprehensive details about a project including metadata, latest IDL version, social links, and ownership information.
+
+## Path Parameters
+
+<ParamField path="projectId" type="string" required>
+  The unique identifier of the project
+</ParamField>
+
+## Authentication
+
+This endpoint supports optional authentication. Private projects require authentication and ownership.
+
+```bash
+Authorization: Bearer <jwt_token>
+```
+
+## Response
+
+<ResponseField name="project" type="object">
+  Detailed project information
+  
+  <Expandable title="Project Object">
+    <ResponseField name="id" type="string">
+      Unique project identifier
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Project name
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      Project description
+    </ResponseField>
+    
+    <ResponseField name="program_id" type="string">
+      Solana program ID (base58 encoded)
+    </ResponseField>
+    
+    <ResponseField name="is_public" type="boolean">
+      Whether the project is publicly visible
+    </ResponseField>
+    
+    <ResponseField name="user_id" type="string">
+      ID of the project owner
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Username of the project owner
+    </ResponseField>
+    
+    <ResponseField name="avatar_url" type="string">
+      Avatar URL of the project owner
+    </ResponseField>
+    
+    <ResponseField name="latestVersion" type="integer">
+      Version number of the most recent IDL upload
+    </ResponseField>
+    
+    <ResponseField name="latestVersionDate" type="string">
+      ISO 8601 timestamp of the latest IDL version
+    </ResponseField>
+    
+    <ResponseField name="socials" type="object">
+      Social media and project links
+      
+      <Expandable title="Socials Object">
+        <ResponseField name="twitter" type="string">
+          Twitter/X profile URL
+        </ResponseField>
+        
+        <ResponseField name="discord" type="string">
+          Discord server invite URL
+        </ResponseField>
+        
+        <ResponseField name="telegram" type="string">
+          Telegram group URL
+        </ResponseField>
+        
+        <ResponseField name="github" type="string">
+          GitHub repository URL
+        </ResponseField>
+        
+        <ResponseField name="website" type="string">
+          Project website URL
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="apiKeyCount" type="integer">
+      Number of active API keys (only visible to owner)
+    </ResponseField>
+    
+    <ResponseField name="isOwner" type="boolean">
+      Whether the authenticated user owns this project
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp of project creation
+    </ResponseField>
+    
+    <ResponseField name="updated_at" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.orquestra.so/api/projects/proj_abc123" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.orquestra.so/api/projects/proj_abc123', {
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+
+const data = await response.json();
+console.log(data.project);
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'https://api.orquestra.so/api/projects/proj_abc123',
+    headers={'Authorization': 'Bearer YOUR_JWT_TOKEN'}
+)
+
+data = response.json()
+print(data['project'])
+```
+</CodeGroup>
+
+## Example Response
+
+```json
+{
+  "project": {
+    "id": "proj_abc123",
+    "name": "Token Swap Program",
+    "description": "A decentralized token swap protocol with automated market making",
+    "program_id": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "is_public": true,
+    "user_id": "user_xyz789",
+    "username": "developer",
+    "avatar_url": "https://avatars.github.com/u/123456",
+    "latestVersion": 3,
+    "latestVersionDate": "2024-03-20T14:45:00.000Z",
+    "socials": {
+      "twitter": "https://twitter.com/tokenswap",
+      "discord": "https://discord.gg/tokenswap",
+      "telegram": "https://t.me/tokenswap",
+      "github": "https://github.com/org/token-swap",
+      "website": "https://tokenswap.io"
+    },
+    "apiKeyCount": 2,
+    "isOwner": true,
+    "created_at": "2024-03-15T10:30:00.000Z",
+    "updated_at": "2024-03-20T14:45:00.000Z"
+  }
+}
+```
+
+## Error Responses
+
+<ResponseField name="error" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+### Common Errors
+
+<AccordionGroup>
+  <Accordion title="404 Not Found">
+    ```json
+    {
+      "error": "Project not found"
+    }
+    ```
+    
+    The specified project ID does not exist or has been deleted.
+  </Accordion>
+  
+  <Accordion title="403 Forbidden">
+    ```json
+    {
+      "error": "Access denied"
+    }
+    ```
+    
+    The project is private and you don't have permission to view it. Only the project owner can access private projects.
+  </Accordion>
+  
+  <Accordion title="500 Internal Server Error">
+    ```json
+    {
+      "error": "Failed to get project"
+    }
+    ```
+    
+    The server encountered an error while fetching the project. This is typically a temporary issue.
+  </Accordion>
+</AccordionGroup>
+
+## Notes
+
+<Note>
+  **Private project access** - Private projects can only be accessed by their owner. Attempting to access someone else's private project will return a 403 error.
+</Note>
+
+<Info>
+  The `apiKeyCount` field is only populated when the authenticated user is the project owner. Other users will see `0`.
+</Info>
+
+<Tip>
+  Use the `latestVersion` and `latestVersionDate` fields to track IDL updates for your project.
+</Tip>

@@ -1,0 +1,128 @@
+---
+title: Introduction
+description: Transform Solana Anchor IDLs into production-ready REST APIs instantly
+icon: rocket
+---
+
+# Welcome to Orquestra
+
+**Orquestra** is a free, open-source platform that instantly converts Solana Anchor IDLs into production-ready REST APIs. Upload your IDL and get auto-generated endpoints for every instruction, account type, and error — complete with transaction building and AI-optimized documentation.
+
+<CardGroup cols={2}>
+  <Card title="Smart IDL parsing" icon="code" iconType="duotone">
+    Anchor v0.29+ and legacy format support with full type resolution
+  </Card>
+  <Card title="Auto-generated APIs" icon="arrows-rotate" iconType="duotone">
+    REST endpoints for all instructions, accounts, errors, and events
+  </Card>
+  <Card title="Transaction building" icon="hammer" iconType="duotone">
+    Base58-encoded transactions ready for signing with Borsh serialization
+  </Card>
+  <Card title="AI-ready docs" icon="robot" iconType="duotone">
+    Structured Markdown optimized for LLMs and AI agents
+  </Card>
+</CardGroup>
+
+## Who is Orquestra for?
+
+Orquestra is perfect for:
+
+<AccordionGroup>
+  <Accordion title="Solana developers building dApps" icon="code">
+    If you're building dApps and need quick API integration without writing custom backend code, Orquestra automatically generates REST endpoints from your Anchor IDL. Focus on your frontend while Orquestra handles the blockchain integration.
+  </Accordion>
+  
+  <Accordion title="AI agents" icon="robot">
+    AI agents need structured, well-documented APIs to interact with Solana programs. Orquestra provides AI-optimized Markdown documentation with complete type information, making it easy for LLMs to understand and interact with your programs.
+  </Accordion>
+  
+  <Accordion title="Backend integrators" icon="server">
+    Abstract away Web3 complexity with RESTful interfaces. Orquestra provides a familiar HTTP API layer on top of Solana programs, making blockchain integration as simple as calling a REST endpoint.
+  </Accordion>
+  
+  <Accordion title="Mobile and web apps" icon="mobile">
+    Build mobile and web applications without dealing with complex Solana SDKs. Use standard HTTP clients to interact with Solana programs through Orquestra's REST API.
+  </Accordion>
+</AccordionGroup>
+
+## Why Orquestra?
+
+| Problem | Orquestra Solution |
+|---------|-------------------|
+| Complex Solana program integration | Auto-generated REST endpoints from IDL |
+| Manual transaction serialization | Built-in base58 transaction builder |
+| Poor documentation for AI agents | AI-optimized Markdown docs with full type info |
+| Scattered program metadata | Centralized project management & explorer |
+| Access control complexity | Simple API key authentication |
+
+## Key features
+
+### Core capabilities
+
+- **Smart IDL parsing** - Anchor v0.29+ and legacy format support with full type resolution for nested types, generics, and CPIs
+- **Auto-generated APIs** - REST endpoints for all instructions, accounts, errors, events, and custom types
+- **Transaction building** - Base58-encoded transactions ready for signing with proper Borsh serialization
+- **AI-ready documentation** - Structured Markdown optimized for LLMs with complete type information
+- **Type resolution** - Full support for nested types, generics, and cross-program invocations
+
+### Developer experience
+
+- **GitHub OAuth** - Secure authentication for developers
+- **Dashboard** - Manage projects, versions, and API keys
+- **Public explorer** - Browse and test any public project
+- **API keys** - Fine-grained access control for private projects
+- **Real-time updates** - Instant API regeneration on IDL updates
+- **CLI tools** - On-chain program discovery and IDL checking
+
+## Architecture
+
+Orquestra is built as a modern monorepo using **Bun workspaces** and **Cloudflare's edge infrastructure**:
+
+```
+orquestra/
+├── packages/
+│   ├── frontend/          # React 18 + Tailwind CSS (Cloudflare Pages)
+│   ├── worker/            # Hono REST API (Cloudflare Workers)
+│   ├── cli/               # CLI tools for on-chain program discovery
+│   └── shared/            # Shared TypeScript types & utilities
+├── migrations/            # D1 (SQLite) database schema
+├── scripts/               # Setup, seeding, and deployment scripts
+└── .github/workflows/     # CI/CD with GitHub Actions
+```
+
+**Tech stack:**
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, Zustand
+- **Backend:** Hono, TypeScript, Cloudflare Workers, D1, KV
+- **Infrastructure:** Cloudflare Pages, Workers, D1, KV Namespaces
+- **Database:** SQLite (D1) with KV caching layer
+
+<Info>
+  Orquestra runs on Cloudflare's edge network, providing low-latency access globally with automatic scaling.
+</Info>
+
+## Getting started
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="play" href="/quickstart">
+    Get up and running in 5 minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Self-host Orquestra on Cloudflare
+  </Card>
+  <Card title="Core concepts" icon="book" href="/concepts/how-it-works">
+    Understand how Orquestra works
+  </Card>
+  <Card title="API reference" icon="code" href="/api/overview">
+    Explore the REST API
+  </Card>
+</CardGroup>
+
+## Community and support
+
+- **GitHub** - [Star the repo](https://github.com/berkayoztunc/orquestra) and contribute
+- **Issues** - Report bugs or request features
+- **Discussions** - Ask questions and share ideas
+
+<Note>
+  Orquestra is open-source under the MIT License. Contributions are welcome!
+</Note>

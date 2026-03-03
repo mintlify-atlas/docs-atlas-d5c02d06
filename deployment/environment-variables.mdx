@@ -1,0 +1,341 @@
+---
+title: Environment Variables
+description: Configure environment variables and secrets for Orquestra deployment
+---
+
+## Required Variables
+
+These environment variables are required for Orquestra to function properly.
+
+### GITHUB_OAUTH_ID
+
+GitHub OAuth application client ID for user authentication.
+
+<Steps>
+  <Step title="Create OAuth App">
+    Go to GitHub Settings → Developer settings → OAuth Apps → New OAuth App
+  </Step>
+  
+  <Step title="Configure Application">
+    - **Application name**: Orquestra
+    - **Homepage URL**: `https://orquestra.dev`
+    - **Authorization callback URL**: `https://api.orquestra.dev/auth/github/callback`
+  </Step>
+  
+  <Step title="Get Client ID">
+    Copy the Client ID (e.g., `Ov23liMCsCr6TDxJdNy5`)
+  </Step>
+  
+  <Step title="Add to wrangler.toml">
+    ```toml
+    [env.production.vars]
+    GITHUB_OAUTH_ID = "Ov23liMCsCr6TDxJdNy5"
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+Ensure the callback URL exactly matches your API domain. Mismatched URLs will cause OAuth to fail.
+</Warning>
+
+### GITHUB_OAUTH_SECRET
+
+GitHub OAuth application client secret (sensitive).
+
+```bash
+# Set as a Wrangler secret (not in wrangler.toml)
+wrangler secret put GITHUB_OAUTH_SECRET --env production
+# Paste your client secret when prompted
+```
+
+<Warning>
+**Never** commit `GITHUB_OAUTH_SECRET` to version control. Always use `wrangler secret put` to set it securely.
+</Warning>
+
+### JWT_SECRET
+
+Secret key for signing JSON Web Tokens used in authentication.
+
+```bash
+# Generate a secure random string (32+ characters)
+openssl rand -base64 32
+
+# Set as a Wrangler secret
+wrangler secret put JWT_SECRET --env production
+# Paste your generated secret when prompted
+```
+
+<Warning>
+Use a cryptographically secure random string for `JWT_SECRET`. A weak secret compromises all user sessions.
+</Warning>
+
+## Optional Variables
+
+These variables have defaults but can be customized.
+
+### FRONTEND_URL
+
+URL of your frontend application (used for CORS and redirects).
+
+```toml
+[env.production.vars]
+FRONTEND_URL = "https://orquestra.dev"
+```
+
+**Default**: `http://localhost:5173` (development)
+
+### API_BASE_URL
+
+Base URL of your API worker.
+
+```toml
+[env.production.vars]
+API_BASE_URL = "https://api.orquestra.dev"
+```
+
+**Default**: `http://localhost:8787` (development)
+
+### CORS_ORIGIN
+
+Allowed origin for Cross-Origin Resource Sharing.
+
+```toml
+[env.production.vars]
+CORS_ORIGIN = "https://orquestra.dev"
+```
+
+The worker code also hardcodes additional development origins:
+
+```typescript
+const corsOrigins = [
+  'https://orquestra.dev',
+  'http://localhost:3000',
+  'http://localhost:5173',
+]
+```
+
+### JWT_EXPIRY
+
+JWT token expiration time.
+
+```toml
+[env.production.vars]
+JWT_EXPIRY = "7d"  # 7 days
+```
+
+**Production default**: `7d`  
+**Development default**: `30d`
+
+### ENVIRONMENT
+
+Environment identifier.
+
+```toml
+[env.production.vars]
+ENVIRONMENT = "production"
+```
+
+Values: `production`, `development`
+
+## Setting Secrets with Wrangler
+
+### Production Secrets
+
+Set all required secrets for production:
+
+```bash
+# GitHub OAuth Client Secret
+wrangler secret put GITHUB_OAUTH_SECRET --env production
+
+# JWT Secret
+wrangler secret put JWT_SECRET --env production
+```
+
+### Development Secrets
+
+For local development, use the `--env development` flag or set in `.dev.vars`:
+
+```bash
+# Create .dev.vars file (gitignored)
+cat > .dev.vars <<EOF
+GITHUB_OAUTH_SECRET=your_dev_secret
+JWT_SECRET=your_dev_jwt_secret
+EOF
+```
+
+<Warning>
+Add `.dev.vars` to `.gitignore` to prevent committing secrets.
+</Warning>
+
+### List Secrets
+
+View configured secrets (values are hidden):
+
+```bash
+wrangler secret list --env production
+```
+
+Output:
+```
+┌──────────────────────────┬────────────┐
+│ Name                     │ Created    │
+├──────────────────────────┼────────────┤
+│ GITHUB_OAUTH_SECRET      │ 2024-01-15 │
+│ JWT_SECRET               │ 2024-01-15 │
+└──────────────────────────┴────────────┘
+```
+
+### Delete a Secret
+
+```bash
+wrangler secret delete GITHUB_OAUTH_SECRET --env production
+```
+
+## Environment-Specific Configuration
+
+### Production Configuration
+
+Complete production environment variables in `wrangler.toml`:
+
+```toml
+[env.production.vars]
+ENVIRONMENT = "production"
+GITHUB_OAUTH_ID = "Ov23liMCsCr6TDxJdNy5"
+JWT_EXPIRY = "7d"
+FRONTEND_URL = "https://orquestra.dev"
+API_BASE_URL = "https://api.orquestra.dev"
+CORS_ORIGIN = "https://orquestra.dev"
+```
+
+### Development Configuration
+
+```toml
+[env.development.vars]
+ENVIRONMENT = "development"
+GITHUB_OAUTH_ID = "Ov23liMCsCr6TDxJdNy5"
+JWT_EXPIRY = "30d"
+FRONTEND_URL = "http://localhost:5173"
+API_BASE_URL = "http://localhost:8787"
+CORS_ORIGIN = "http://localhost:5173"
+```
+
+## Environment Type Definition
+
+From `packages/worker/src/index.ts`, the environment bindings:
+
+```typescript
+type Env = {
+  Variables: Record<string, unknown>
+  Bindings: {
+    // D1 Database
+    DB: D1Database
+    
+    // KV Namespaces
+    IDLS: KVNamespace
+    CACHE: KVNamespace
+    
+    // Required Secrets
+    GITHUB_OAUTH_ID: string
+    GITHUB_OAUTH_SECRET: string
+    JWT_SECRET: string
+    
+    // Optional Configuration
+    SOLANA_RPC_URL: string
+    FRONTEND_URL: string
+    API_BASE_URL: string
+    CORS_ORIGIN: string
+  }
+}
+```
+
+## Verification
+
+Verify environment variables are set correctly:
+
+```bash
+# Deploy with dry-run to see configuration
+wrangler deploy --env production --dry-run
+
+# Check secrets are set
+wrangler secret list --env production
+
+# Test authentication flow
+curl https://api.orquestra.dev/auth/github
+# Should redirect to GitHub OAuth
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Never commit secrets to Git">
+    - Use `wrangler secret put` for sensitive values
+    - Add `.dev.vars` to `.gitignore`
+    - Use separate secrets for dev/staging/production
+  </Accordion>
+  
+  <Accordion title="Rotate secrets regularly">
+    ```bash
+    # Generate new JWT secret
+    openssl rand -base64 32
+    
+    # Update the secret
+    wrangler secret put JWT_SECRET --env production
+    ```
+  </Accordion>
+  
+  <Accordion title="Use strong JWT secrets">
+    - Minimum 32 characters
+    - Cryptographically random
+    - Different for each environment
+  </Accordion>
+  
+  <Accordion title="Verify OAuth callback URLs">
+    - Must exactly match GitHub OAuth app settings
+    - Use HTTPS in production
+    - Don't include trailing slashes
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### OAuth Fails with "redirect_uri_mismatch"
+
+The callback URL doesn't match GitHub OAuth app settings.
+
+**Solution**: Update callback URL in GitHub OAuth app to match `API_BASE_URL`:
+```
+https://api.orquestra.dev/auth/github/callback
+```
+
+### JWT Token Invalid
+
+`JWT_SECRET` may not be set or differs between deployments.
+
+```bash
+# Check if secret is set
+wrangler secret list --env production
+
+# Set the secret
+wrangler secret put JWT_SECRET --env production
+```
+
+### CORS Errors
+
+Frontend origin doesn't match `CORS_ORIGIN`.
+
+**Solution**: Update `CORS_ORIGIN` in `wrangler.toml` and redeploy:
+```bash
+wrangler deploy --env production
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database Migrations" icon="database" href="/deployment/database-migrations">
+    Initialize your D1 database schema
+  </Card>
+  
+  <Card title="Cloudflare Setup" icon="cloud" href="/deployment/cloudflare">
+    Configure Workers, Pages, and infrastructure
+  </Card>
+</CardGroup>

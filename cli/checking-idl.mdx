@@ -1,0 +1,463 @@
+---
+title: Checking IDL
+description: Verify which Solana programs have on-chain Anchor IDL
+---
+
+The `check-idl` command checks each program for an on-chain Anchor IDL account, supporting both old and new Anchor IDL derivation methods.
+
+## Overview
+
+Anchor programs can store their IDL on-chain in a deterministic account. The `check-idl` command:
+
+- Checks for IDL using **both** old and new Anchor derivation methods
+- Verifies account existence without downloading the full IDL
+- Outputs results to a CSV with IDL status for each program
+
+## Basic Usage
+
+```bash
+bun run cli:check-idl -- --rpc-url <url> [options]
+```
+
+### Required Options
+
+| Option | Description |
+|--------|-------------|
+| `--rpc-url <url>` | Solana RPC endpoint URL (or set `SOLANA_RPC_URL` env) |
+
+### Optional Flags
+
+| Option | Description | Default |
+|--------|-------------|--------|
+| `--out-dir <dir>` | Output directory for CSV files | `./output` |
+| `--input-file <path>` | Custom JSON file with program IDs | `<out-dir>/.program-list.json` |
+| `--batch-size <n>` | Number of programs to check per batch | `50` |
+| `--concurrency <n>` | Concurrent RPC calls per batch | `10` |
+| `--rps <n>` | Max requests per second (rate limit) | `10` |
+| `--resume` | Resume from checkpoint if available | `false` |
+
+## Examples
+
+<CodeGroup>
+```bash After Scan
+# Check programs from previous scan
+bun run cli:check-idl -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --out-dir ./output
+```
+
+```bash Custom Program List
+# Check specific programs
+echo '["MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD","JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"]' > programs.json
+bun run cli:check-idl -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --input-file ./programs.json
+```
+
+```bash Resume Interrupted
+# Resume from checkpoint
+bun run cli:check-idl -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --out-dir ./output \
+  --resume
+```
+
+```bash Smaller Batches
+# Reduce batch size for public RPC
+bun run cli:check-idl -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --batch-size 25 \
+  --rps 5
+```
+
+```bash Premium RPC
+# Higher throughput with premium RPC
+bun run cli:check-idl -- \
+  --rpc-url 'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY' \
+  --batch-size 100 \
+  --rps 20
+```
+</CodeGroup>
+
+## IDL Derivation Methods
+
+The tool checks for IDL using **both** Anchor derivation methods to ensure compatibility with all Anchor versions.
+
+### Old Anchor (before v0.30)
+
+Older Anchor versions used `createWithSeed` for IDL accounts:
+
+```typescript
+const base = PublicKey.findProgramAddressSync([], programId)[0]
+const idlAccount = PublicKey.createWithSeed(base, 'anchor:idl', programId)
+```
+
+**Derivation**:
+1. Find PDA with empty seeds: `base = PDA([], programId)`
+2. Create account with seed: `createWithSeed(base, "anchor:idl", programId)`
+
+### New Anchor (≥0.30)
+
+Newer Anchor versions use a direct PDA derivation:
+
+```typescript
+const [idlAccount] = PublicKey.findProgramAddressSync(
+  [Buffer.from('anchor:idl'), programId.toBuffer()],
+  programId
+)
+```
+
+**Derivation**:
+- Find PDA: `PDA(["anchor:idl", programId], programId)`
+
+### Detection Strategy
+
+The checker:
+
+1. Derives **both** possible IDL account addresses
+2. Checks if **either** account exists using `getMultipleAccounts`
+3. Marks program as having IDL if **any** account exists
+4. Records which address was found in the CSV
+
+<Note>
+This dual-method approach ensures compatibility with all Anchor versions without requiring prior knowledge of which version was used.
+</Note>
+
+## Output Format
+
+The check produces a CSV file named `program_idl_status.csv` in the specified output directory.
+
+### program_idl_status.csv Structure
+
+```csv
+program_id,has_onchain_idl,idl_account,error
+MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD,true,9jWC3EixD3D7ChMrrSRw3opnGHQ8YxZGJqGkzcup3tAn,
+JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,true,C88XWfp26heEmDkmfSzeXP7Fd7GQJ2j9dDTUsyiZbUTa,
+SomeOtherProgram111111111111111111111111111,false,8Pt1hkMe8yxmMuaRvv1ozBoqwbYh3rmaemDbV68JZiPX,
+FailedProgram1111111111111111111111111111111,false,,Account not found
+```
+
+| Column | Description |
+|--------|-------------|
+| `program_id` | Base58-encoded program public key |
+| `has_onchain_idl` | `true` if IDL account exists, `false` otherwise |
+| `idl_account` | The IDL account address that was found (or attempted) |
+| `error` | Error message if check failed (empty if successful) |
+
+### Result Interpretation
+
+<Tabs>
+  <Tab title="Has IDL">
+    ```csv
+    program_id,has_onchain_idl,idl_account,error
+    MarBms...,true,9jWC3E...,
+    ```
+    
+    - Program has on-chain IDL
+    - `idl_account` contains the found address
+    - Can be imported into Orquestra automatically
+  </Tab>
+  
+  <Tab title="No IDL">
+    ```csv
+    program_id,has_onchain_idl,idl_account,error
+    SomeOther...,false,8Pt1hk...,
+    ```
+    
+    - Program has no on-chain IDL
+    - `idl_account` shows attempted address
+    - May still have IDL available elsewhere (GitHub, etc.)
+  </Tab>
+  
+  <Tab title="Error">
+    ```csv
+    program_id,has_onchain_idl,idl_account,error
+    Failed...,false,,Account not found
+    ```
+    
+    - Check failed due to RPC error or other issue
+    - `error` column explains the problem
+    - May need to retry
+  </Tab>
+</Tabs>
+
+### Additional Files Created
+
+| File | Description | Purpose |
+|------|-------------|--------|
+| `.checkpoint-idl.json` | Resume checkpoint data | Enables `--resume` functionality |
+
+## Input Sources
+
+The `check-idl` command can read programs from two sources:
+
+### 1. From Previous Scan (Default)
+
+After running `scan`, the program list is saved as `.program-list.json`:
+
+```bash
+# Step 1: Scan programs
+bun run cli:scan -- --rpc-url 'https://...' --out-dir ./output
+
+# Step 2: Check IDL (reads .program-list.json automatically)
+bun run cli:check-idl -- --rpc-url 'https://...' --out-dir ./output
+```
+
+### 2. Custom Program List
+
+Provide a JSON file with an array of program IDs:
+
+```bash
+# Create custom list
+cat > my-programs.json << EOF
+[
+  "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD",
+  "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+  "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
+]
+EOF
+
+# Check those programs
+bun run cli:check-idl -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --input-file ./my-programs.json \
+  --out-dir ./custom-check
+```
+
+<Warning>
+If no `--input-file` is provided and `.program-list.json` doesn't exist, the command will fail with an error:
+
+```
+Error: Program list not found at ./output/.program-list.json
+Run "scan" first, or provide --input-file with a JSON array of program IDs.
+```
+</Warning>
+
+## Checkpointing and Resume
+
+IDL checks can be interrupted and resumed:
+
+```bash
+# First run (interrupted)
+bun run cli:check-idl -- --rpc-url 'https://...' --out-dir ./output
+# ... interrupted at 4523/10000 ...
+
+# Resume from checkpoint
+bun run cli:check-idl -- --rpc-url 'https://...' --out-dir ./output --resume
+# ✓ Resuming: 4523 already processed, 5477 remaining
+```
+
+### How Checkpointing Works
+
+1. Progress is saved to `.checkpoint-idl.json` after each batch
+2. On resume, the tool:
+   - Loads the full program list
+   - Skips programs already processed (from checkpoint)
+   - Continues with remaining programs
+3. Results are appended to `program_idl_status.csv`
+4. The checkpoint file is deleted on successful completion
+
+<Note>
+Checkpoints are specific to the output directory. Use the same `--out-dir` when resuming.
+</Note>
+
+## Batch Processing
+
+The checker processes programs in batches for optimal performance:
+
+### Batch Configuration
+
+```bash
+bun run cli:check-idl -- \
+  --rpc-url 'https://...' \
+  --batch-size 50 \
+  --concurrency 10
+```
+
+**How it works**:
+1. Programs are divided into batches of `--batch-size` (default: 50)
+2. Within each batch, up to `--concurrency` (default: 10) concurrent RPC calls are made
+3. After each batch completes, results are written to CSV and checkpoint is updated
+
+### Optimizing Batch Size
+
+<Tabs>
+  <Tab title="Public RPC">
+    ```bash
+    --batch-size 25 \
+    --concurrency 5 \
+    --rps 3
+    ```
+    
+    - Smaller batches reduce rate limit errors
+    - Lower concurrency prevents overwhelming the RPC
+    - Conservative rate limit
+  </Tab>
+  
+  <Tab title="Premium RPC">
+    ```bash
+    --batch-size 100 \
+    --concurrency 20 \
+    --rps 20
+    ```
+    
+    - Larger batches for faster processing
+    - Higher concurrency leverages premium limits
+    - Aggressive rate limit
+  </Tab>
+</Tabs>
+
+### getMultipleAccounts Optimization
+
+The tool uses `getMultipleAccounts` RPC method to check multiple IDL accounts in a single call:
+
+- Checks both old and new IDL addresses per program
+- Batches up to 100 addresses per `getMultipleAccounts` call
+- Falls back to individual `getAccountInfo` calls if batch fails
+
+## Performance Considerations
+
+### Checking Speed
+
+Checking 10,000 programs typically takes:
+
+- **Public RPC**: 30-60 minutes (with rate limiting)
+- **Premium RPC**: 5-15 minutes (higher throughput)
+
+### Rate Limiting
+
+Adjust rate limits based on your RPC provider:
+
+<CodeGroup>
+```bash Conservative (Public)
+# Slow but reliable
+bun run cli:check-idl -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --batch-size 25 \
+  --concurrency 5 \
+  --rps 3
+```
+
+```bash Balanced (Public)
+# Default settings
+bun run cli:check-idl -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --batch-size 50 \
+  --concurrency 10 \
+  --rps 10
+```
+
+```bash Aggressive (Premium)
+# Fast with premium RPC
+bun run cli:check-idl -- \
+  --rpc-url 'https://mainnet.helius-rpc.com/?api-key=KEY' \
+  --batch-size 100 \
+  --concurrency 20 \
+  --rps 30
+```
+</CodeGroup>
+
+## Filtering Results
+
+After checking, you can filter the CSV to find programs of interest:
+
+### Programs with IDL
+
+```bash
+# Extract only programs with on-chain IDL
+grep ",true," ./output/program_idl_status.csv > programs_with_idl.csv
+```
+
+### Programs without IDL
+
+```bash
+# Extract programs without on-chain IDL
+grep ",false," ./output/program_idl_status.csv > programs_without_idl.csv
+```
+
+### Programs with Errors
+
+```bash
+# Extract programs that had check errors
+awk -F',' 'NR > 1 && $4 != ""' ./output/program_idl_status.csv > programs_with_errors.csv
+```
+
+## Troubleshooting
+
+### "Error: Program list not found"
+
+**Problem**: Running `check-idl` before `scan`.
+
+**Solution**: Run scan first or provide a custom list:
+
+```bash
+# Option 1: Run scan first
+bun run cli:scan -- --rpc-url 'https://...' --out-dir ./output
+bun run cli:check-idl -- --rpc-url 'https://...' --out-dir ./output
+
+# Option 2: Provide custom list
+bun run cli:check-idl -- \
+  --input-file ./my-programs.json \
+  --out-dir ./output
+```
+
+### "429 Too Many Requests"
+
+**Problem**: RPC is rate-limiting your requests.
+
+**Solutions**:
+- Lower `--rps` value: `--rps 2`
+- Reduce `--batch-size`: `--batch-size 25`
+- Lower `--concurrency`: `--concurrency 5`
+- Use premium RPC with higher limits
+- Use `--resume` to continue after waiting
+
+### High Error Rate
+
+**Problem**: Many programs showing errors in CSV.
+
+**Solutions**:
+- Check RPC endpoint is healthy
+- Reduce rate limiting to prevent 429 errors
+- Retry failed programs from error CSV
+
+### Slow Performance
+
+**Problem**: IDL check takes too long.
+
+**Solutions**:
+- Use premium RPC with higher throughput
+- Increase `--batch-size` and `--concurrency`
+- Increase `--rps` if RPC supports it
+- Process in chunks with custom program lists
+
+## Integration with Orquestra
+
+Programs with on-chain IDL can be automatically imported into Orquestra:
+
+1. **Run check-idl** to identify programs with on-chain IDL
+2. **Filter results** to get programs with `has_onchain_idl=true`
+3. **Import to Orquestra** via dashboard or API
+4. **Auto-generate APIs** without manual IDL upload
+
+```bash
+# Example workflow
+bun run cli:full -- --rpc-url 'https://...' --out-dir ./mainnet
+grep ",true," ./mainnet/program_idl_status.csv > programs_to_import.csv
+# Import programs_to_import.csv into Orquestra
+```
+
+<Note>
+Future versions may include direct integration to automatically import discovered programs into Orquestra.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CLI Overview" icon="terminal" href="/cli/overview">
+    Back to CLI overview and getting started
+  </Card>
+  <Card title="Scanning Programs" icon="radar" href="/cli/scanning-programs">
+    Learn about program discovery
+  </Card>
+</CardGroup>

@@ -1,0 +1,626 @@
+---
+title: 'Database Schema'
+description: 'Complete database design and schema documentation for Orquestra'
+---
+
+## Database Overview
+
+Orquestra uses **Cloudflare D1**, a serverless SQLite database distributed at the edge for low-latency data access worldwide.
+
+### Key Features
+
+- **Relational Database**: Full SQL support with ACID transactions
+- **Edge Distribution**: Data replicated globally for fast access
+- **SQLite-based**: Standard SQLite syntax and features
+- **Zero Configuration**: Managed by Cloudflare infrastructure
+
+### Database Bindings
+
+The D1 database is bound to the Worker as `DB`:
+
+```typescript
+// wrangler.toml
+[[d1_databases]]
+binding = "DB"
+database_name = "orquestra-prod"
+database_id = "7308ceeb-9f86-4948-a1bf-916d21078788"
+```
+
+## Schema Migrations
+
+Database schema is managed through migration files in `migrations/`:
+
+1. **001_initial_schema.sql** - Core tables and relationships
+2. **002_indexes.sql** - Performance optimization indexes
+3. **003_custom_docs_and_known_addresses.sql** - Extended features
+
+### Running Migrations
+
+```bash
+# Development (local)
+npm run db:migrate:dev
+
+# Production (remote)
+wrangler d1 execute orquestra-prod \
+  --file ./migrations/001_initial_schema.sql --remote
+```
+
+## Core Tables
+
+### users
+
+Stores GitHub-authenticated user accounts.
+
+**Location**: `migrations/001_initial_schema.sql:5`
+
+```sql
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  github_id INTEGER UNIQUE NOT NULL,
+  username TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  avatar_url TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | TEXT | UUID primary key |
+| `github_id` | INTEGER | GitHub user ID (unique) |
+| `username` | TEXT | GitHub username (unique) |
+| `email` | TEXT | User email address (unique) |
+| `avatar_url` | TEXT | GitHub avatar URL |
+| `created_at` | DATETIME | Account creation timestamp |
+| `updated_at` | DATETIME | Last update timestamp |
+
+#### Indexes
+
+```sql
+CREATE INDEX idx_users_github_id ON users(github_id);
+CREATE INDEX idx_users_username ON users(username);
+```
+
+#### Usage Example
+
+```typescript
+// Create user after GitHub OAuth
+const user = await c.env.DB.prepare(`
+  INSERT INTO users (id, github_id, username, email, avatar_url)
+  VALUES (?, ?, ?, ?, ?)
+`).bind(userId, githubId, username, email, avatarUrl).run()
+```
+
+### projects
+
+Stores IDL project metadata and configuration.
+
+**Location**: `migrations/001_initial_schema.sql:16`
+
+```sql
+CREATE TABLE IF NOT EXISTS projects (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  program_id TEXT NOT NULL,
+  is_public BOOLEAN DEFAULT TRUE,
+  custom_docs TEXT,  -- Added in migration 003
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, program_id)
+);
+```
+
+#### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | TEXT | UUID primary key |
+| `user_id` | TEXT | Owner user ID (foreign key) |
+| `name` | TEXT | Project display name |
+| `description` | TEXT | Project description |
+| `program_id` | TEXT | Solana program address |
+| `is_public` | BOOLEAN | Public/private visibility |
+| `custom_docs` | TEXT | Owner-editable documentation |
+| `created_at` | DATETIME | Project creation timestamp |
+| `updated_at` | DATETIME | Last update timestamp |
+
+#### Constraints
+
+- **Foreign Key**: `user_id` → `users(id)` with CASCADE delete
+- **Unique**: Each user can only have one project per program_id
+
+#### Indexes
+
+```sql
+CREATE INDEX idx_projects_user_id ON projects(user_id);
+CREATE INDEX idx_projects_program_id ON projects(program_id);
+CREATE INDEX idx_projects_is_public ON projects(is_public);
+```
+
+#### Usage Example
+
+```typescript
+// Create new project
+const project = await c.env.DB.prepare(`
+  INSERT INTO projects (id, user_id, name, description, program_id, is_public)
+  VALUES (?, ?, ?, ?, ?, ?)
+`).bind(projectId, userId, name, description, programId, true).run()
+
+// Get user's projects
+const projects = await c.env.DB.prepare(`
+  SELECT * FROM projects WHERE user_id = ? ORDER BY created_at DESC
+`).bind(userId).all()
+```
+
+### idl_versions
+
+Stores IDL version history with JSON and generated documentation.
+
+**Location**: `migrations/001_initial_schema.sql:30`
+
+```sql
+CREATE TABLE IF NOT EXISTS idl_versions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  idl_json TEXT NOT NULL,
+  cpi_md TEXT,
+  version INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+```
+
+#### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | TEXT | UUID primary key |
+| `project_id` | TEXT | Parent project ID (foreign key) |
+| `idl_json` | TEXT | Full IDL JSON content |
+| `cpi_md` | TEXT | Generated CPI documentation (Markdown) |
+| `version` | INTEGER | Version number (auto-incrementing) |
+| `created_at` | DATETIME | Version upload timestamp |
+
+#### Constraints
+
+- **Foreign Key**: `project_id` → `projects(id)` with CASCADE delete
+
+#### Indexes
+
+```sql
+CREATE INDEX idx_idl_versions_project_id ON idl_versions(project_id);
+CREATE INDEX idx_idl_versions_created_at ON idl_versions(created_at);
+```
+
+#### Usage Example
+
+```typescript
+// Upload new IDL version
+const version = await c.env.DB.prepare(`
+  INSERT INTO idl_versions (id, project_id, idl_json, cpi_md, version)
+  VALUES (?, ?, ?, ?, ?)
+`).bind(versionId, projectId, JSON.stringify(idl), cpiMarkdown, 1).run()
+
+// Get latest version
+const latest = await c.env.DB.prepare(`
+  SELECT * FROM idl_versions 
+  WHERE project_id = ? 
+  ORDER BY version DESC 
+  LIMIT 1
+`).bind(projectId).first()
+```
+
+### api_keys
+
+Stores API authentication keys for programmatic access.
+
+**Location**: `migrations/001_initial_schema.sql:41`
+
+```sql
+CREATE TABLE IF NOT EXISTS api_keys (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  key TEXT UNIQUE NOT NULL,
+  last_used DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+```
+
+#### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | TEXT | UUID primary key |
+| `project_id` | TEXT | Associated project ID (foreign key) |
+| `key` | TEXT | API key (hashed, unique) |
+| `last_used` | DATETIME | Last usage timestamp |
+| `created_at` | DATETIME | Key creation timestamp |
+| `expires_at` | DATETIME | Expiration date (optional) |
+
+#### Constraints
+
+- **Foreign Key**: `project_id` → `projects(id)` with CASCADE delete
+- **Unique**: Each API key must be unique
+
+#### Indexes
+
+```sql
+CREATE INDEX idx_api_keys_project_id ON api_keys(project_id);
+CREATE INDEX idx_api_keys_key ON api_keys(key);
+```
+
+#### Usage Example
+
+```typescript
+// Create API key
+const apiKey = await c.env.DB.prepare(`
+  INSERT INTO api_keys (id, project_id, key, expires_at)
+  VALUES (?, ?, ?, ?)
+`).bind(keyId, projectId, hashedKey, expiresAt).run()
+
+// Validate and update last_used
+const key = await c.env.DB.prepare(`
+  UPDATE api_keys SET last_used = CURRENT_TIMESTAMP
+  WHERE key = ? AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+  RETURNING *
+`).bind(providedKey).first()
+```
+
+### project_socials
+
+Stores social media links and website URLs for projects.
+
+**Location**: `migrations/001_initial_schema.sql:52`
+
+```sql
+CREATE TABLE IF NOT EXISTS project_socials (
+  id TEXT PRIMARY KEY,
+  project_id TEXT UNIQUE NOT NULL,
+  twitter TEXT,
+  discord TEXT,
+  telegram TEXT,
+  github TEXT,
+  website TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+```
+
+#### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | TEXT | UUID primary key |
+| `project_id` | TEXT | Associated project ID (unique, foreign key) |
+| `twitter` | TEXT | Twitter/X profile URL |
+| `discord` | TEXT | Discord server invite |
+| `telegram` | TEXT | Telegram group/channel |
+| `github` | TEXT | GitHub repository URL |
+| `website` | TEXT | Project website URL |
+| `created_at` | DATETIME | Record creation timestamp |
+| `updated_at` | DATETIME | Last update timestamp |
+
+#### Constraints
+
+- **Foreign Key**: `project_id` → `projects(id)` with CASCADE delete
+- **Unique**: One-to-one relationship with projects
+
+#### Indexes
+
+```sql
+CREATE INDEX idx_project_socials_project_id ON project_socials(project_id);
+```
+
+#### Usage Example
+
+```typescript
+// Add social links
+const socials = await c.env.DB.prepare(`
+  INSERT INTO project_socials (id, project_id, twitter, discord, github, website)
+  VALUES (?, ?, ?, ?, ?, ?)
+  ON CONFLICT(project_id) DO UPDATE SET
+    twitter = excluded.twitter,
+    discord = excluded.discord,
+    updated_at = CURRENT_TIMESTAMP
+`).bind(id, projectId, twitter, discord, github, website).run()
+```
+
+### known_addresses
+
+Stores labeled public key addresses for a project (e.g., program accounts, authorities).
+
+**Location**: `migrations/003_custom_docs_and_known_addresses.sql:5`
+
+```sql
+CREATE TABLE IF NOT EXISTS known_addresses (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  address TEXT NOT NULL,
+  description TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+```
+
+#### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | TEXT | UUID primary key |
+| `project_id` | TEXT | Associated project ID (foreign key) |
+| `label` | TEXT | Human-readable label (e.g., "Treasury") |
+| `address` | TEXT | Solana public key address |
+| `description` | TEXT | Optional description |
+| `created_at` | DATETIME | Record creation timestamp |
+| `updated_at` | DATETIME | Last update timestamp |
+
+#### Constraints
+
+- **Foreign Key**: `project_id` → `projects(id)` with CASCADE delete
+
+#### Indexes
+
+```sql
+CREATE INDEX idx_known_addresses_project_id ON known_addresses(project_id);
+```
+
+#### Usage Example
+
+```typescript
+// Add known address
+const address = await c.env.DB.prepare(`
+  INSERT INTO known_addresses (id, project_id, label, address, description)
+  VALUES (?, ?, ?, ?, ?)
+`).bind(id, projectId, 'Treasury', treasuryAddress, 'Main treasury account').run()
+
+// Get all known addresses for project
+const addresses = await c.env.DB.prepare(`
+  SELECT * FROM known_addresses WHERE project_id = ?
+`).bind(projectId).all()
+```
+
+## Entity Relationships
+
+### Relationship Diagram
+
+```
+┌─────────────┐
+│    users    │
+│  (1 user)   │
+└──────┬──────┘
+       │ 1:N
+       ↓
+┌─────────────┐
+│  projects   │
+│ (N projects)│
+└──────┬──────┘
+       │
+       ├─────────────┬──────────────┬──────────────┬─────────────┐
+       │ 1:N         │ 1:N          │ 1:1          │ 1:N         │
+       ↓             ↓              ↓              ↓             ↓
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+│   idl    │  │   api    │  │ project  │  │  known   │  │ (future) │
+│ versions │  │   keys   │  │ socials  │  │addresses │  │  tables  │
+└──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘
+```
+
+### Relationships Summary
+
+| Parent | Child | Type | Delete Behavior |
+|--------|-------|------|----------------|
+| users | projects | 1:N | CASCADE |
+| projects | idl_versions | 1:N | CASCADE |
+| projects | api_keys | 1:N | CASCADE |
+| projects | project_socials | 1:1 | CASCADE |
+| projects | known_addresses | 1:N | CASCADE |
+
+**CASCADE DELETE**: When a parent record is deleted, all related child records are automatically deleted.
+
+Example: Deleting a user deletes all their projects, which in turn deletes all IDL versions, API keys, socials, and known addresses.
+
+## KV Namespaces
+
+In addition to D1, Orquestra uses Cloudflare KV for caching and IDL storage.
+
+### IDLS Namespace
+
+**Binding**: `IDLS`
+
+Stores raw IDL JSON for fast retrieval without database queries.
+
+```typescript
+// Store IDL in KV
+await c.env.IDLS.put(
+  `project:${projectId}:idl`,
+  JSON.stringify(idl),
+  { expirationTtl: 86400 } // 24 hour TTL
+)
+
+// Retrieve IDL from KV
+const idlJson = await c.env.IDLS.get(`project:${projectId}:idl`)
+```
+
+#### Key Patterns
+
+- `project:{projectId}:idl` - Latest IDL JSON
+- `project:{projectId}:version:{version}` - Specific version
+
+### CACHE Namespace
+
+**Binding**: `CACHE`
+
+Caches API responses for public endpoints.
+
+```typescript
+// Cache API response
+await c.env.CACHE.put(
+  `api:${projectId}:instructions`,
+  JSON.stringify(instructions),
+  { expirationTtl: 3600 } // 1 hour TTL
+)
+
+// Retrieve from cache
+const cached = await c.env.CACHE.get(`api:${projectId}:instructions`)
+```
+
+#### Key Patterns
+
+- `api:{projectId}:instructions` - Instructions list
+- `api:{projectId}:accounts` - Account types
+- `api:{projectId}:docs` - Generated documentation
+
+## Query Examples
+
+### Complex Queries
+
+#### Get User with Projects
+
+```typescript
+const userWithProjects = await c.env.DB.prepare(`
+  SELECT 
+    u.*,
+    json_group_array(
+      json_object(
+        'id', p.id,
+        'name', p.name,
+        'program_id', p.program_id,
+        'is_public', p.is_public
+      )
+    ) as projects
+  FROM users u
+  LEFT JOIN projects p ON u.id = p.user_id
+  WHERE u.id = ?
+  GROUP BY u.id
+`).bind(userId).first()
+```
+
+#### Get Project with Latest IDL and Socials
+
+```typescript
+const projectDetails = await c.env.DB.prepare(`
+  SELECT 
+    p.*,
+    i.idl_json,
+    i.version as idl_version,
+    s.twitter,
+    s.discord,
+    s.github,
+    s.website
+  FROM projects p
+  LEFT JOIN (
+    SELECT * FROM idl_versions 
+    WHERE project_id = ? 
+    ORDER BY version DESC 
+    LIMIT 1
+  ) i ON p.id = i.project_id
+  LEFT JOIN project_socials s ON p.id = s.project_id
+  WHERE p.id = ?
+`).bind(projectId, projectId).first()
+```
+
+#### Get Public Projects with Version Count
+
+```typescript
+const publicProjects = await c.env.DB.prepare(`
+  SELECT 
+    p.*,
+    u.username,
+    u.avatar_url,
+    COUNT(i.id) as version_count
+  FROM projects p
+  INNER JOIN users u ON p.user_id = u.id
+  LEFT JOIN idl_versions i ON p.id = i.project_id
+  WHERE p.is_public = true
+  GROUP BY p.id
+  ORDER BY p.created_at DESC
+  LIMIT ? OFFSET ?
+`).bind(limit, offset).all()
+```
+
+## Performance Considerations
+
+### Indexes
+
+All frequently queried columns have indexes:
+- User lookups by GitHub ID and username
+- Project queries by user_id and program_id
+- API key validation
+- IDL version retrieval
+
+### Caching Strategy
+
+1. **KV First**: Check KV cache before database
+2. **TTL**: Set appropriate expiration times
+3. **Invalidation**: Clear cache on updates
+
+### Query Optimization
+
+- Use prepared statements for parameterized queries
+- Avoid N+1 queries with JOINs
+- Limit result sets with LIMIT/OFFSET
+- Use indexes for WHERE clauses
+
+## Database Administration
+
+### Access Local Database
+
+```bash
+wrangler d1 shell orquestra-dev
+```
+
+### Access Production Database
+
+```bash
+wrangler d1 shell orquestra-prod --remote
+```
+
+### Export Data
+
+```bash
+wrangler d1 export orquestra-prod --output backup.sql --remote
+```
+
+### Common SQL Queries
+
+```sql
+-- Count users
+SELECT COUNT(*) FROM users;
+
+-- Count projects
+SELECT COUNT(*) FROM projects WHERE is_public = true;
+
+-- Find recent uploads
+SELECT p.name, i.version, i.created_at 
+FROM idl_versions i
+JOIN projects p ON i.project_id = p.id
+ORDER BY i.created_at DESC
+LIMIT 10;
+
+-- Get user statistics
+SELECT 
+  u.username,
+  COUNT(p.id) as project_count,
+  COUNT(i.id) as version_count
+FROM users u
+LEFT JOIN projects p ON u.id = p.user_id
+LEFT JOIN idl_versions i ON p.id = i.project_id
+GROUP BY u.id;
+```
+
+## Next Steps
+
+- Set up your [Local Development](/development/local-setup) environment
+- Explore the [Project Structure](/development/project-structure)
+- Review [API Routes](packages/worker/src/routes/) in the codebase
+- Check [Migration Files](migrations/) for full SQL

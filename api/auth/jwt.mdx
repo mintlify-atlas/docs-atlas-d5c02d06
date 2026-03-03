@@ -1,0 +1,380 @@
+---
+title: 'JWT Authentication'
+description: 'Authenticate API requests with JSON Web Tokens'
+---
+
+## Overview
+
+Orquestra uses JWT (JSON Web Token) for stateless authentication. After logging in via [GitHub OAuth](/api/auth/github-oauth), you receive a JWT that must be included in subsequent API requests.
+
+## Token Format
+
+JWTs are composed of three parts separated by dots:
+
+```
+header.payload.signature
+```
+
+Example:
+```
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhYmMxMjNkZWY0NTYiLCJ1c2VybmFtZSI6Im9jdG9jYXQiLCJpYXQiOjE3MDUzMTQwMDAsImV4cCI6MTcwNTkxODgwMH0.dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+```
+
+### Header
+
+```json
+{
+  "alg": "HS256",
+  "typ": "JWT"
+}
+```
+
+- **Algorithm**: HMAC-SHA256 (symmetric signing)
+- **Type**: JWT
+
+### Payload (Claims)
+
+```json
+{
+  "sub": "abc123def456",
+  "username": "octocat",
+  "iat": 1705314000,
+  "exp": 1705918800
+}
+```
+
+<ResponseField name="sub" type="string">
+  Subject - the user ID
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  GitHub username
+</ResponseField>
+
+<ResponseField name="iat" type="number">
+  Issued At - Unix timestamp when the token was created
+</ResponseField>
+
+<ResponseField name="exp" type="number">
+  Expiration - Unix timestamp when the token expires (7 days from issue)
+</ResponseField>
+
+### Signature
+
+The signature is computed using HMAC-SHA256:
+
+```
+HMACSHA256(
+  base64UrlEncode(header) + "." + base64UrlEncode(payload),
+  secret
+)
+```
+
+The secret is stored securely in the `JWT_SECRET` environment variable.
+
+## Using JWT Tokens
+
+### Authorization Header
+
+Include the JWT in the `Authorization` header with the `Bearer` scheme:
+
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+### Example Requests
+
+<CodeGroup>
+
+```bash cURL
+curl https://api.orquestra.so/auth/me \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+```javascript Fetch API
+const token = localStorage.getItem('authToken');
+
+const response = await fetch('https://api.orquestra.so/auth/me', {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+
+const data = await response.json();
+```
+
+```javascript Axios
+import axios from 'axios';
+
+const token = localStorage.getItem('authToken');
+
+const { data } = await axios.get('https://api.orquestra.so/auth/me', {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+```
+
+```python Requests
+import requests
+
+token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+response = requests.get(
+    'https://api.orquestra.so/auth/me',
+    headers={'Authorization': f'Bearer {token}'}
+)
+
+data = response.json()
+```
+
+```rust Reqwest
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+
+let token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
+
+let mut headers = HeaderMap::new();
+headers.insert(
+    AUTHORIZATION,
+    HeaderValue::from_str(&format!("Bearer {}", token)).unwrap()
+);
+
+let client = reqwest::Client::new();
+let response = client
+    .get("https://api.orquestra.so/auth/me")
+    .headers(headers)
+    .send()
+    .await?;
+```
+
+</CodeGroup>
+
+## Token Expiration
+
+### Default Expiration
+
+JWT tokens expire **7 days** after issuance.
+
+### Checking Expiration
+
+You can decode the JWT client-side to check expiration:
+
+```javascript
+function isTokenExpired(token) {
+  try {
+    const [, payload] = token.split('.');
+    const decoded = JSON.parse(atob(payload));
+    return decoded.exp * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+}
+
+const token = localStorage.getItem('authToken');
+if (isTokenExpired(token)) {
+  // Redirect to login
+  window.location.href = '/login';
+}
+```
+
+### Handling Expired Tokens
+
+When a token expires, the API returns a `401 Unauthorized` error:
+
+```json
+{
+  "error": "Unauthorized",
+  "message": "Invalid or expired token"
+}
+```
+
+Your application should:
+
+1. Detect the 401 error
+2. Clear the stored token
+3. Redirect the user to the login page
+
+```javascript
+async function apiRequest(url, options = {}) {
+  const token = localStorage.getItem('authToken');
+  
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  
+  if (response.status === 401) {
+    // Token expired or invalid
+    localStorage.removeItem('authToken');
+    window.location.href = '/login';
+    return;
+  }
+  
+  return response.json();
+}
+```
+
+## Token Refresh
+
+<Warning>
+  Orquestra does not currently support token refresh. When a token expires, the user must log in again via GitHub OAuth.
+</Warning>
+
+To minimize user disruption:
+
+- Tokens have a 7-day lifespan
+- Users can stay logged in for a week of continuous use
+- Consider warning users when their token is about to expire (e.g., within 24 hours)
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Store tokens securely">
+    - **Frontend**: Use `localStorage` or `sessionStorage` (not cookies if you need cross-domain access)
+    - **Mobile**: Use secure storage (Keychain on iOS, Keystore on Android)
+    - **CLI**: Store in a secure file with restricted permissions (`chmod 600`)
+    - **Never** commit tokens to version control
+  </Accordion>
+  
+  <Accordion title="Protect against XSS">
+    - Sanitize all user input
+    - Use Content Security Policy (CSP) headers
+    - Avoid `eval()` and inline scripts
+    - If using cookies, set `HttpOnly` and `Secure` flags
+  </Accordion>
+  
+  <Accordion title="Use HTTPS">
+    Always use HTTPS to prevent token interception. Never send tokens over HTTP.
+  </Accordion>
+  
+  <Accordion title="Validate tokens server-side">
+    - Always validate the signature
+    - Check expiration time
+    - Verify the issuer (if applicable)
+    - Orquestra handles this automatically for all protected endpoints
+  </Accordion>
+  
+  <Accordion title="Handle token exposure">
+    If a token is compromised:
+    1. User should log in again to get a new token
+    2. Old token will expire after 7 days
+    3. Consider implementing a token blocklist for immediate revocation (not currently supported)
+  </Accordion>
+</AccordionGroup>
+
+## Authentication Middleware
+
+Orquestra uses two middleware functions for JWT authentication:
+
+### Required Authentication
+
+Endpoints protected by `authMiddleware` require a valid JWT:
+
+- `/auth/me` - Get current user
+- `/api/projects/mine` - List user's projects
+- `/api/projects/:projectId` - Update/delete projects
+- `/api/projects/:projectId/keys` - Manage API keys
+- All owner-only endpoints
+
+If the token is missing or invalid, returns `401 Unauthorized`.
+
+### Optional Authentication
+
+Endpoints using `optionalAuthMiddleware` work with or without a token:
+
+- `/api/projects` - List projects (shows private projects if authenticated)
+- `/api/:projectId/docs` - Get documentation (shows private docs if owner)
+- `/api/:projectId/addresses` - List known addresses
+
+If a token is provided and valid, user context is set. If not, the request continues anonymously.
+
+## Error Responses
+
+<ResponseField name="401 Unauthorized">
+  **Missing Authorization Header**
+  ```json
+  {
+    "error": "Unauthorized",
+    "message": "Missing or invalid Authorization header"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  **Invalid Token Format**
+  ```json
+  {
+    "error": "Unauthorized",
+    "message": "Invalid or expired token"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  **Expired Token**
+  ```json
+  {
+    "error": "Unauthorized",
+    "message": "Invalid or expired token"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  **Invalid Signature**
+  ```json
+  {
+    "error": "Unauthorized",
+    "message": "Invalid or expired token"
+  }
+  ```
+</ResponseField>
+
+## Implementation Reference
+
+The JWT service is implemented in `/packages/worker/src/services/jwt.ts` using the Web Crypto API (compatible with Cloudflare Workers).
+
+### Token Generation
+
+```typescript
+export async function generateJWT(
+  payload: { sub: string; username: string },
+  secret: string,
+  expiresInSeconds: number = 7 * 24 * 60 * 60
+): Promise<string>
+```
+
+### Token Verification
+
+```typescript
+export async function verifyJWT(
+  token: string,
+  secret: string
+): Promise<JWTPayload>
+```
+
+<Note>
+  The implementation uses HMAC-SHA256 with Base64URL encoding, following the JWT standard (RFC 7519).
+</Note>
+
+## Comparison with API Keys
+
+| Feature | JWT | API Key |
+|---------|-----|----------|
+| **Use Case** | User authentication | Programmatic access |
+| **Lifetime** | 7 days | Configurable or permanent |
+| **Scope** | Full user access | Project-specific |
+| **Revocation** | Cannot revoke (expires naturally) | Can delete anytime |
+| **Header** | `Authorization: Bearer <token>` | `X-API-Key: <key>` |
+| **Best For** | Web/mobile apps | CI/CD, bots, integrations |
+
+See [API Keys](/api/auth/api-keys) for programmatic authentication.
+
+## Related Endpoints
+
+- [GitHub OAuth](/api/auth/github-oauth) - Obtain a JWT token
+- [API Keys](/api/auth/api-keys) - Alternative authentication method
+- [Get Current User](/api/auth/github-oauth#get-current-user) - Verify token validity

@@ -1,0 +1,478 @@
+---
+title: Building Transactions
+description: Use Orquestra's API to build Solana transactions from your IDL
+---
+
+# Building Transactions
+
+Once you've uploaded your IDL, Orquestra provides REST endpoints to build Solana transactions programmatically. This guide explains how to use the transaction builder API.
+
+## Understanding the Build Endpoint
+
+For each instruction in your IDL, Orquestra generates a build endpoint:
+
+```
+POST /api/{projectId}/instructions/{instructionName}/build
+```
+
+This endpoint:
+1. Validates accounts and arguments against your IDL
+2. Serializes instruction data using Anchor's encoding
+3. Constructs a complete transaction
+4. Returns a base64-encoded transaction ready to sign
+
+## Basic Transaction Building
+
+<Steps>
+  <Step title="List Available Instructions">
+    First, discover what instructions are available:
+    
+    ```bash
+    curl https://api.orquestra.so/api/{projectId}/instructions
+    ```
+  </Step>
+  
+  <Step title="Get Instruction Details">
+    Retrieve account and argument requirements:
+    
+    ```bash
+    curl https://api.orquestra.so/api/{projectId}/instructions/{name}
+    ```
+  </Step>
+  
+  <Step title="Build the Transaction">
+    Provide accounts, arguments, and a fee payer:
+    
+    ```bash
+    curl -X POST https://api.orquestra.so/api/{projectId}/instructions/{name}/build \
+      -H "Content-Type: application/json" \
+      -d '{ /* transaction params */ }'
+    ```
+  </Step>
+</Steps>
+
+## Request Structure
+
+All build requests require three main components:
+
+<CodeGroup>
+```json Structure
+{
+  "accounts": {
+    "accountName1": "pubkeyString1",
+    "accountName2": "pubkeyString2"
+  },
+  "args": {
+    "argName1": "value1",
+    "argName2": { "field": "value" }
+  },
+  "feePayer": "feePayerPubkeyString",
+  "recentBlockhash": "optional_blockhash",
+  "network": "mainnet"
+}
+```
+
+```typescript TypeScript Type
+interface BuildRequest {
+  accounts: Record<string, string>;  // account name → pubkey
+  args: Record<string, any>;         // argument name → value
+  feePayer: string;                  // fee payer pubkey
+  recentBlockhash?: string;          // optional, fetched if not provided
+  network?: string;                  // "mainnet", "devnet", or custom RPC URL
+}
+```
+</CodeGroup>
+
+### Accounts
+
+Map each account name from your IDL to a public key string:
+
+```json
+"accounts": {
+  "user": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+  "systemProgram": "11111111111111111111111111111111"
+}
+```
+
+<Note>
+Account names must match exactly as defined in your IDL. Use camelCase if your IDL uses camelCase.
+</Note>
+
+### Arguments
+
+Provide values for each instruction argument. Types are automatically validated:
+
+<CodeGroup>
+```json Primitive Types
+"args": {
+  "amount": 1000000,
+  "name": "My NFT",
+  "enabled": true
+}
+```
+
+```json Struct Types
+"args": {
+  "params": {
+    "duration": 86400,
+    "rate": 500,
+    "autoRenew": true
+  }
+}
+```
+
+```json Array Types
+"args": {
+  "amounts": [100, 200, 300],
+  "addresses": [
+    "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"
+  ]
+}
+```
+</CodeGroup>
+
+### Network Selection
+
+Specify which Solana network to use for fetching recent blockhashes and account data:
+
+- `"mainnet"` or `"mainnet-beta"`: Solana mainnet (default)
+- `"devnet"`: Solana devnet  
+- Custom RPC URL: `"https://my-rpc.com"`
+
+## Complete Example
+
+Here's a full example building a token transfer instruction:
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.orquestra.so/api/abc123xyz/instructions/transfer/build \
+  -H "Content-Type: application/json" \
+  -d '{
+    "accounts": {
+      "from": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+      "to": "BvZzVzX5ZxWvQJXJHYJJJQZqQ9J9J9J9J9J9J9J9J9J",
+      "authority": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+      "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    },
+    "args": {
+      "amount": 1000000
+    },
+    "feePayer": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+    "network": "mainnet"
+  }'
+```
+
+```typescript TypeScript
+const response = await fetch(
+  `https://api.orquestra.so/api/${projectId}/instructions/transfer/build`,
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      accounts: {
+        from: fromTokenAccount,
+        to: toTokenAccount,
+        authority: wallet.publicKey.toBase58(),
+        tokenProgram: TOKEN_PROGRAM_ID.toBase58(),
+      },
+      args: {
+        amount: 1_000_000,
+      },
+      feePayer: wallet.publicKey.toBase58(),
+      network: 'mainnet',
+    }),
+  }
+);
+
+const { transaction } = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    f"https://api.orquestra.so/api/{project_id}/instructions/transfer/build",
+    json={
+        "accounts": {
+            "from": from_token_account,
+            "to": to_token_account,
+            "authority": wallet_pubkey,
+            "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        },
+        "args": {"amount": 1000000},
+        "feePayer": wallet_pubkey,
+        "network": "mainnet",
+    },
+)
+
+transaction = response.json()["transaction"]
+```
+</CodeGroup>
+
+## Response Format
+
+```json
+{
+  "transaction": "base64EncodedTransactionString",
+  "blockhash": "5KxR8...JQz7",
+  "lastValidBlockHeight": 234567890
+}
+```
+
+The response includes:
+- **transaction**: Base64-encoded serialized transaction
+- **blockhash**: Recent blockhash used
+- **lastValidBlockHeight**: Block height until which the transaction is valid
+
+## Signing and Sending
+
+After building the transaction, you need to sign and send it:
+
+<CodeGroup>
+```typescript Solana Web3.js
+import { Transaction, Connection } from '@solana/web3.js';
+
+// Deserialize the transaction
+const tx = Transaction.from(
+  Buffer.from(response.transaction, 'base64')
+);
+
+// Sign with wallet
+const signed = await wallet.signTransaction(tx);
+
+// Send to network
+const connection = new Connection('https://api.mainnet-beta.solana.com');
+const signature = await connection.sendRawTransaction(signed.serialize());
+
+// Confirm
+await connection.confirmTransaction({
+  signature,
+  blockhash: response.blockhash,
+  lastValidBlockHeight: response.lastValidBlockHeight,
+});
+
+console.log('Transaction confirmed:', signature);
+```
+
+```typescript Anchor
+import { AnchorProvider, Wallet } from '@coral-xyz/anchor';
+import { Transaction } from '@solana/web3.js';
+
+const tx = Transaction.from(
+  Buffer.from(response.transaction, 'base64')
+);
+
+const provider = AnchorProvider.local();
+const signature = await provider.sendAndConfirm(tx);
+
+console.log('Signature:', signature);
+```
+</CodeGroup>
+
+## Handling PDAs (Program Derived Addresses)
+
+If your instruction uses PDAs, Orquestra can derive them for you:
+
+### List PDA Accounts
+
+```bash
+curl https://api.orquestra.so/api/{projectId}/pda
+```
+
+Response:
+
+```json
+{
+  "projectId": "abc123xyz",
+  "programId": "YourProgramID...",
+  "pdaAccounts": [
+    {
+      "instruction": "initialize",
+      "account": "vault",
+      "seeds": [
+        { "kind": "const", "value": "vault" },
+        { "kind": "account", "path": "user" },
+        { "kind": "arg", "path": "vaultId" }
+      ]
+    }
+  ]
+}
+```
+
+### Derive a PDA
+
+```bash
+curl -X POST https://api.orquestra.so/api/{projectId}/pda/derive \
+  -H "Content-Type: application/json" \
+  -d '{
+    "instruction": "initialize",
+    "account": "vault",
+    "seedValues": {
+      "user": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+      "vaultId": 42
+    }
+  }'
+```
+
+Response:
+
+```json
+{
+  "address": "DerivedPDAAddress...",
+  "bump": 255
+}
+```
+
+Then use the derived address in your build request:
+
+```json
+"accounts": {
+  "vault": "DerivedPDAAddress...",
+  ...
+}
+```
+
+## Validation and Error Handling
+
+Orquestra validates your request against the IDL:
+
+### Common Errors
+
+<CodeGroup>
+```json Missing Account
+{
+  "error": "Invalid build request",
+  "details": [
+    "Missing required account: systemProgram"
+  ]
+}
+```
+
+```json Type Mismatch
+{
+  "error": "Invalid build request",
+  "details": [
+    "Argument 'amount' must be a number, got string"
+  ]
+}
+```
+
+```json Invalid Pubkey
+{
+  "error": "Failed to build transaction",
+  "details": "Invalid public key: not_a_valid_pubkey"
+}
+```
+</CodeGroup>
+
+<Tip>
+Always check the instruction details endpoint first to see exact account and argument requirements.
+</Tip>
+
+## Rate Limits
+
+Transaction building is rate-limited:
+
+- **30 requests per minute** per IP address
+
+Response headers:
+
+```
+X-RateLimit-Limit: 30
+X-RateLimit-Remaining: 25
+X-RateLimit-Reset: 1710504600
+```
+
+If you exceed the limit:
+
+```json
+{
+  "error": "Too Many Requests",
+  "message": "Rate limit exceeded. Try again in 45 seconds.",
+  "retryAfter": 45
+}
+```
+
+## Working with Complex Types
+
+### Enums
+
+Enums are represented as objects with a single key:
+
+```json
+"args": {
+  "orderType": { "limit": { "price": 100 } }
+}
+```
+
+For unit variants:
+
+```json
+"args": {
+  "status": { "active": {} }
+}
+```
+
+### Options (Nullable Values)
+
+Use `null` for `None`, or provide the value:
+
+```json
+"args": {
+  "metadata": null,
+  "name": "Some name"
+}
+```
+
+### Vectors/Arrays
+
+```json
+"args": {
+  "recipients": [
+    "Pubkey1...",
+    "Pubkey2..."
+  ]
+}
+```
+
+## Best Practices
+
+1. **Cache project metadata**: Fetch instruction details once and reuse
+2. **Derive PDAs beforehand**: Pre-compute PDAs to reduce API calls
+3. **Handle rate limits gracefully**: Implement exponential backoff
+4. **Validate inputs client-side**: Check types before calling the API
+5. **Use TypeScript types**: Generate types from your IDL for type safety
+6. **Specify network explicitly**: Don't rely on defaults in production
+
+## Advanced: Batch Transactions
+
+To build multiple transactions in parallel:
+
+```typescript
+const promises = instructions.map((ix) =>
+  fetch(`https://api.orquestra.so/api/${projectId}/instructions/${ix.name}/build`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ix.params),
+  }).then((r) => r.json())
+);
+
+const transactions = await Promise.all(promises);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Keys" icon="key" href="/guides/api-keys">
+    Set up authentication for production apps
+  </Card>
+  <Card title="Uploading IDLs" icon="upload" href="/guides/uploading-idl">
+    Learn more about IDL management
+  </Card>
+  <Card title="AI Documentation" icon="robot" href="/guides/ai-documentation">
+    Generate docs for AI agents
+  </Card>
+  <Card title="API Reference" icon="book" href="/api-reference">
+    Full API documentation
+  </Card>
+</CardGroup>

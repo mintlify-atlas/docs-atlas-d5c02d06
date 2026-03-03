@@ -1,0 +1,276 @@
+---
+title: Uploading and Managing IDLs
+description: Learn how to upload Anchor IDLs to Orquestra and manage versioning
+---
+
+# Uploading and Managing IDLs
+
+Orquestra allows you to upload Anchor Interface Definition Language (IDL) files to automatically generate APIs for building Solana transactions. This guide covers uploading, versioning, and managing your IDLs.
+
+## Prerequisites
+
+- An Orquestra account (sign in via GitHub)
+- An Anchor IDL JSON file for your Solana program
+- Your program's on-chain address (Program ID)
+
+## Uploading via Dashboard
+
+<Steps>
+  <Step title="Navigate to Projects">
+    From the Orquestra dashboard, click **New Project** or the **+** icon
+  </Step>
+  
+  <Step title="Fill in Project Details">
+    - **Name**: A descriptive name for your project
+    - **Description**: Optional description of your program
+    - **Program ID**: Your Solana program's public key
+    - **Visibility**: Choose public or private
+  </Step>
+  
+  <Step title="Upload Your IDL">
+    Paste your Anchor IDL JSON or upload the file directly. The IDL will be validated automatically.
+  </Step>
+  
+  <Step title="Add CPI Documentation (Optional)">
+    If your program supports Cross-Program Invocation, you can include CPI.md documentation to help other developers integrate with your program.
+  </Step>
+</Steps>
+
+<Note>
+Public projects are discoverable by anyone and can be used via the API without authentication. Private projects are only accessible to you.
+</Note>
+
+## Uploading via API
+
+You can programmatically upload IDLs using the REST API:
+
+### Endpoint
+
+```
+POST /idl/upload
+```
+
+### Authentication
+
+Requires a Bearer token (JWT) from GitHub OAuth login.
+
+### Request Body
+
+<CodeGroup>
+```json Example Request
+{
+  "name": "My Solana Program",
+  "description": "A token staking program",
+  "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "idl": {
+    "version": "0.1.0",
+    "name": "my_program",
+    "instructions": [
+      {
+        "name": "initialize",
+        "accounts": [
+          {
+            "name": "user",
+            "isMut": true,
+            "isSigner": true
+          }
+        ],
+        "args": []
+      }
+    ]
+  },
+  "cpiMd": "# CPI Integration\n\nCall this program from your Anchor program...",
+  "isPublic": true
+}
+```
+
+```bash cURL
+curl -X POST https://api.orquestra.so/idl/upload \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Solana Program",
+    "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "idl": { /* your IDL JSON */ },
+    "isPublic": true
+  }'
+```
+
+```typescript TypeScript
+const response = await fetch('https://api.orquestra.so/idl/upload', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${jwtToken}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    name: 'My Solana Program',
+    programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    idl: anchorIdl,
+    isPublic: true,
+  }),
+});
+
+const data = await response.json();
+console.log('Project ID:', data.project.id);
+```
+</CodeGroup>
+
+### Response
+
+```json
+{
+  "project": {
+    "id": "abc123xyz",
+    "name": "My Solana Program",
+    "slug": "my-solana-program",
+    "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "isPublic": true
+  },
+  "idl": {
+    "versionId": "v1_xyz",
+    "version": 1,
+    "programName": "my_program",
+    "instructionCount": 5,
+    "accountCount": 3,
+    "errorCount": 2,
+    "eventCount": 1
+  },
+  "validation": {
+    "warnings": []
+  }
+}
+```
+
+## IDL Validation
+
+Orquestra automatically validates your IDL structure. Common validation checks include:
+
+- Required fields (`name`, `version`, `instructions`)
+- Account metadata structure
+- Type definitions and references
+- PDA seed configurations
+
+<Tip>
+If your IDL has warnings (non-critical issues), the upload will succeed but warnings will be returned in the response.
+</Tip>
+
+## Size Limits
+
+- **Maximum IDL size**: 10 MB
+- **Maximum CPI.md size**: 5 MB
+
+## IDL Versioning
+
+Orquestra maintains a complete version history of your IDL. Every time you update your IDL, a new version is created.
+
+### Updating an IDL
+
+```bash
+curl -X PUT https://api.orquestra.so/idl/{projectId} \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "idl": { /* updated IDL JSON */ },
+    "cpiMd": "# Updated CPI docs..."
+  }'
+```
+
+### Response
+
+```json
+{
+  "versionId": "v2_abc",
+  "version": 2,
+  "programName": "my_program",
+  "instructionCount": 6,
+  "warnings": []
+}
+```
+
+### Listing All Versions
+
+```bash
+curl https://api.orquestra.so/idl/{projectId}/versions
+```
+
+### Response
+
+```json
+{
+  "projectId": "abc123xyz",
+  "versions": [
+    {
+      "id": "v2_abc",
+      "version": 2,
+      "created_at": "2024-03-15T10:30:00Z"
+    },
+    {
+      "id": "v1_xyz",
+      "version": 1,
+      "created_at": "2024-03-01T08:00:00Z"
+    }
+  ]
+}
+```
+
+### Retrieving a Specific Version
+
+By default, the API returns the latest version. To fetch a specific version:
+
+```bash
+curl https://api.orquestra.so/idl/{projectId}?version=1
+```
+
+## Rate Limits
+
+IDL uploads are rate-limited to prevent abuse:
+
+- **10 requests per minute** per IP address
+
+Rate limit headers are included in responses:
+
+```
+X-RateLimit-Limit: 10
+X-RateLimit-Remaining: 7
+X-RateLimit-Reset: 1710504600
+```
+
+## Deleting a Project
+
+Deleting a project removes all IDL versions, API keys, and cached data. This action is **irreversible**.
+
+```bash
+curl -X DELETE https://api.orquestra.so/idl/{projectId} \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "confirmName": "My Solana Program"
+  }'
+```
+
+<Note>
+You must provide the exact project name as confirmation to prevent accidental deletions.
+</Note>
+
+## Best Practices
+
+1. **Use descriptive names**: Make it easy to identify projects in your dashboard
+2. **Keep IDLs in sync**: Update your Orquestra IDL whenever you redeploy your program
+3. **Version thoughtfully**: Each update creates a new version, so group related changes
+4. **Add CPI docs**: If others will integrate with your program, provide clear CPI documentation
+5. **Test with private projects**: Use private visibility while developing, then make public when ready
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Building Transactions" icon="hammer" href="/guides/building-transactions">
+    Learn how to use your uploaded IDL to build transactions
+  </Card>
+  <Card title="API Keys" icon="key" href="/guides/api-keys">
+    Create API keys for programmatic access
+  </Card>
+  <Card title="AI Documentation" icon="robot" href="/guides/ai-documentation">
+    Explore auto-generated Markdown docs for AI agents
+  </Card>
+</CardGroup>

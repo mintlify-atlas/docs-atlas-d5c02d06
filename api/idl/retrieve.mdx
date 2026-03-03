@@ -1,0 +1,193 @@
+---
+title: 'Retrieve IDL'
+api: 'GET /api/idl/:projectId'
+description: 'Retrieve an IDL for a specific project'
+---
+
+## Overview
+
+Retrieves the IDL (Interface Description Language) file for a project. By default, returns the latest version. You can specify a version number to retrieve a specific version.
+
+## Authentication
+
+This endpoint does not require authentication. Public projects can be accessed by anyone.
+
+## Path Parameters
+
+<ParamField path="projectId" type="string" required>
+  The unique project identifier returned when the IDL was uploaded.
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="version" type="number">
+  Specific version number to retrieve. If omitted, returns the latest version.
+</ParamField>
+
+## Response
+
+<ResponseField name="projectId" type="string">
+  The project identifier.
+</ResponseField>
+
+<ResponseField name="projectName" type="string">
+  Name of the project.
+</ResponseField>
+
+<ResponseField name="programId" type="string">
+  Solana program ID associated with this IDL.
+</ResponseField>
+
+<ResponseField name="version" type="number">
+  Version number of the returned IDL.
+</ResponseField>
+
+<ResponseField name="idl" type="object">
+  The complete IDL JSON object conforming to Anchor IDL structure.
+</ResponseField>
+
+<ResponseField name="cpiMd" type="string" optional>
+  CPI documentation in Markdown format, if provided during upload.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of when this version was created.
+</ResponseField>
+
+<ResponseField name="source" type="string" optional>
+  Indicates data source. Value is `"cache"` when served from KV cache, omitted when from database.
+</ResponseField>
+
+## Error Codes
+
+<ResponseField name="404" type="Not Found">
+  Project or specified version not found.
+</ResponseField>
+
+<ResponseField name="500" type="Internal Server Error">
+  Server error during retrieval. Response includes error `details`.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL - Latest Version
+curl https://api.orquestra.dev/api/idl/abc123def456
+```
+
+```bash cURL - Specific Version
+curl https://api.orquestra.dev/api/idl/abc123def456?version=2
+```
+
+```javascript JavaScript
+// Get latest version
+const response = await fetch('https://api.orquestra.dev/api/idl/abc123def456');
+const data = await response.json();
+console.log(data);
+
+// Get specific version
+const v2Response = await fetch('https://api.orquestra.dev/api/idl/abc123def456?version=2');
+const v2Data = await v2Response.json();
+console.log(v2Data);
+```
+
+```python Python
+import requests
+
+# Get latest version
+response = requests.get('https://api.orquestra.dev/api/idl/abc123def456')
+print(response.json())
+
+# Get specific version
+response_v2 = requests.get(
+    'https://api.orquestra.dev/api/idl/abc123def456',
+    params={'version': 2}
+)
+print(response_v2.json())
+```
+</CodeGroup>
+
+### Success Response (200)
+
+```json
+{
+  "projectId": "abc123def456",
+  "projectName": "My Token Program",
+  "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "version": 1,
+  "idl": {
+    "version": "0.1.0",
+    "name": "my_token_program",
+    "instructions": [
+      {
+        "name": "initialize",
+        "accounts": [
+          {
+            "name": "mint",
+            "isMut": true,
+            "isSigner": false
+          },
+          {
+            "name": "authority",
+            "isMut": false,
+            "isSigner": true
+          }
+        ],
+        "args": [
+          {
+            "name": "decimals",
+            "type": "u8"
+          }
+        ]
+      }
+    ],
+    "accounts": [],
+    "types": [],
+    "errors": [],
+    "events": []
+  },
+  "cpiMd": "# CPI Documentation\n\nHow to call this program from another program...",
+  "createdAt": "2026-03-03T10:30:00.000Z"
+}
+```
+
+### Success Response (200 - From Cache)
+
+```json
+{
+  "projectId": "abc123def456",
+  "idl": {
+    "version": "0.1.0",
+    "name": "my_token_program",
+    "instructions": [],
+    "accounts": [],
+    "types": [],
+    "errors": [],
+    "events": []
+  },
+  "source": "cache"
+}
+```
+
+### Error Response (404)
+
+```json
+{
+  "error": "IDL not found"
+}
+```
+
+## Caching Behavior
+
+- IDLs are cached in KV storage for 7 days after access
+- Cache keys are formatted as `idl:{projectId}:latest` or `idl:{projectId}:{version}`
+- Cached responses include a `source: "cache"` field
+- Cache misses automatically populate the cache from the database
+- Updates to IDL (PUT requests) automatically invalidate and refresh the cache
+
+## Version Management
+
+- Each project maintains a history of IDL versions
+- Versions are numbered sequentially starting from 1
+- Use the [List Versions](/api/idl/versions) endpoint to see all available versions
+- The latest version is always accessible without specifying a version parameter

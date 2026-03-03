@@ -1,0 +1,378 @@
+---
+title: 'PDA Derivation'
+description: 'Derive and list Program Derived Addresses from IDL definitions'
+---
+
+## Overview
+
+Program Derived Addresses (PDAs) are deterministic addresses derived from seeds and a program ID. Orquestra automatically extracts PDA information from your Anchor IDL and provides endpoints to list and derive PDAs.
+
+## List PDA Accounts
+
+Get all PDA-enabled accounts from a project's IDL, including their seed requirements.
+
+### Endpoint
+
+```
+GET /api/:projectId/pda
+```
+
+### Response
+
+<ResponseField name="projectId" type="string">
+  Project identifier
+</ResponseField>
+
+<ResponseField name="programId" type="string">
+  Program ID (base58)
+</ResponseField>
+
+<ResponseField name="pdaAccounts" type="array">
+  List of accounts with PDA metadata
+  
+  <Expandable title="PDA Account Object">
+    <ResponseField name="instruction" type="string">
+      Instruction name where this account is used
+    </ResponseField>
+    
+    <ResponseField name="account" type="string">
+      Account name
+    </ResponseField>
+    
+    <ResponseField name="seeds" type="array">
+      Seed requirements for derivation
+      
+      <Expandable title="Seed Object">
+        <ResponseField name="kind" type="string">
+          Seed type: `"const"`, `"arg"`, or `"account"`
+        </ResponseField>
+        
+        <ResponseField name="name" type="string">
+          Seed name (for `arg` and `account` kinds)
+        </ResponseField>
+        
+        <ResponseField name="description" type="string">
+          Description of constant seed value (for `const` kind)
+        </ResponseField>
+        
+        <ResponseField name="type" type="string">
+          Argument type (for `arg` kind)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="customProgram" type="string | null">
+      Custom program ID for cross-program PDAs (e.g., Associated Token Accounts)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash cURL
+curl https://api.orquestra.so/api/my-project/pda
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.orquestra.so/api/my-project/pda');
+const data = await response.json();
+
+data.pdaAccounts.forEach(account => {
+  console.log(`${account.instruction}.${account.account}:`);
+  console.log('Seeds:', account.seeds);
+});
+```
+
+```python Python
+import requests
+
+response = requests.get('https://api.orquestra.so/api/my-project/pda')
+data = response.json()
+
+for account in data['pdaAccounts']:
+    print(f"{account['instruction']}.{account['account']}:")
+    print('Seeds:', account['seeds'])
+```
+
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "projectId": "my-project",
+  "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "pdaAccounts": [
+    {
+      "instruction": "initialize",
+      "account": "userAccount",
+      "seeds": [
+        {
+          "kind": "const",
+          "description": "user"
+        },
+        {
+          "kind": "account",
+          "name": "authority"
+        },
+        {
+          "kind": "arg",
+          "name": "id",
+          "type": "u64"
+        }
+      ],
+      "customProgram": null
+    },
+    {
+      "instruction": "createToken",
+      "account": "associatedTokenAccount",
+      "seeds": [
+        {
+          "kind": "account",
+          "name": "owner"
+        },
+        {
+          "kind": "const",
+          "description": "0x06ddf6e1d765a193d9cbe146ceeb79ac1cb485ed5f5b37913a8cf5857eff00a9"
+        },
+        {
+          "kind": "account",
+          "name": "mint"
+        }
+      ],
+      "customProgram": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+    }
+  ]
+}
+```
+
+## Derive PDA
+
+Derive a specific PDA address by providing the required seed values.
+
+### Endpoint
+
+```
+POST /api/:projectId/pda/derive
+```
+
+### Request Body
+
+<ParamField body="instruction" type="string" required>
+  Name of the instruction containing the PDA account
+</ParamField>
+
+<ParamField body="account" type="string" required>
+  Name of the PDA account to derive
+</ParamField>
+
+<ParamField body="seedValues" type="object" required>
+  Map of seed names to values
+  
+  - For `arg` seeds: provide the argument value (type must match IDL)
+  - For `account` seeds: provide the public key (base58)
+  - For `const` seeds: no value needed (automatically filled)
+  
+  ```json
+  {
+    "authority": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+    "id": 12345
+  }
+  ```
+</ParamField>
+
+### Response
+
+<ResponseField name="pda" type="string">
+  Derived PDA address (base58)
+</ResponseField>
+
+<ResponseField name="bump" type="number">
+  Bump seed used (0-255)
+</ResponseField>
+
+<ResponseField name="programId" type="string">
+  Program ID used for derivation
+</ResponseField>
+
+<ResponseField name="seeds" type="array">
+  List of seeds used in derivation
+  
+  <Expandable title="Seed Object">
+    <ResponseField name="kind" type="string">
+      Seed type
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Seed name (if applicable)
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      Description (for constant seeds)
+    </ResponseField>
+    
+    <ResponseField name="value" type="any">
+      Provided value (for arg and account seeds)
+    </ResponseField>
+    
+    <ResponseField name="hex" type="string">
+      Hex-encoded seed bytes
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.orquestra.so/api/my-project/pda/derive \
+  -H "Content-Type: application/json" \
+  -d '{
+    "instruction": "initialize",
+    "account": "userAccount",
+    "seedValues": {
+      "authority": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+      "id": 12345
+    }
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.orquestra.so/api/my-project/pda/derive',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      instruction: 'initialize',
+      account: 'userAccount',
+      seedValues: {
+        authority: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+        id: 12345
+      }
+    })
+  }
+);
+
+const data = await response.json();
+console.log('PDA:', data.pda);
+console.log('Bump:', data.bump);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.orquestra.so/api/my-project/pda/derive',
+    json={
+        'instruction': 'initialize',
+        'account': 'userAccount',
+        'seedValues': {
+            'authority': '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+            'id': 12345
+        }
+    }
+)
+
+data = response.json()
+print('PDA:', data['pda'])
+print('Bump:', data['bump'])
+```
+
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "pda": "8qbHbw2BbbTHBW1sbeqakYXVKRQM8Ne7pLK7m6CVfeR",
+  "bump": 255,
+  "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "seeds": [
+    {
+      "kind": "const",
+      "description": "user",
+      "hex": "75736572"
+    },
+    {
+      "kind": "account",
+      "name": "authority",
+      "value": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+      "hex": "5f8c6..."
+    },
+    {
+      "kind": "arg",
+      "name": "id",
+      "value": 12345,
+      "hex": "3930000000000000"
+    }
+  ]
+}
+```
+
+## Error Responses
+
+<ResponseField name="400 Bad Request">
+  - Missing required fields
+  - Invalid seed values
+  - Invalid public key format
+  - Missing required seed value
+</ResponseField>
+
+<ResponseField name="404 Not Found">
+  - Project not found or not public
+  - Instruction not found
+  - Account not found
+  - Account has no PDA seeds
+</ResponseField>
+
+## PDA Derivation Algorithm
+
+Orquestra uses the standard Solana PDA derivation algorithm:
+
+1. Concatenate all seed bytes in order
+2. Append the program ID (32 bytes)
+3. Append the bump seed (1 byte, starting at 255)
+4. Compute SHA-256 hash of the concatenated bytes
+5. If the hash is on the ed25519 curve, decrement bump and retry
+6. Return the first valid off-curve address (PDA) and its bump
+
+### Seed Encoding
+
+- **Constant seeds**: UTF-8 bytes or raw bytes from IDL
+- **String args**: Raw UTF-8 bytes (no length prefix)
+- **Integer args**: Little-endian bytes matching the type width
+- **Boolean args**: Single byte (0 or 1)
+- **Public key args/accounts**: 32 raw bytes
+
+### Cross-Program PDAs
+
+Some accounts (like Associated Token Accounts) are PDAs of a different program. The `customProgram` field indicates which program to use for derivation.
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Wallet Integration" icon="wallet">
+    Calculate PDAs before submitting transactions to ensure correct account addresses.
+  </Card>
+  
+  <Card title="Frontend Development" icon="code">
+    Derive PDAs client-side without requiring anchor-lang dependencies.
+  </Card>
+  
+  <Card title="Testing & Debugging" icon="bug">
+    Verify PDA derivation logic matches your program's behavior.
+  </Card>
+  
+  <Card title="Account Lookup" icon="magnifying-glass">
+    Find user-specific accounts by deriving their PDAs from known seeds.
+  </Card>
+</CardGroup>
+
+## Related Endpoints
+
+- [Build Transaction](/api/transactions/build) - Use derived PDAs in transaction building
+- [Get Instruction Details](/api/instructions/get) - View PDA metadata for instruction accounts

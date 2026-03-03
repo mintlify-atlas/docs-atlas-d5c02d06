@@ -1,0 +1,362 @@
+---
+title: 'Local Development Setup'
+description: 'Step-by-step guide to set up Orquestra for local development'
+---
+
+## Prerequisites
+
+Before getting started, ensure you have the following installed:
+
+- **Node.js** 18+ or **Bun** 1.0+
+- **Git** for version control
+- **Cloudflare account** (free tier works)
+- **GitHub account** (for OAuth authentication)
+
+## Clone and Install
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/berkayozrunc/orquestra.git
+cd orquestra
+```
+
+### 2. Install Dependencies
+
+The project uses Bun workspaces for monorepo management:
+
+```bash
+bun install
+# or
+npm run install:all
+```
+
+This installs dependencies for all packages:
+- `packages/frontend` - React frontend
+- `packages/worker` - Hono API backend
+- `packages/shared` - Shared types and utilities
+- `packages/cli` - CLI tools for program discovery
+
+## Environment Configuration
+
+### 1. Create Environment File
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env.local
+```
+
+### 2. Configure Cloudflare Credentials
+
+Obtain your Cloudflare credentials:
+
+1. **API Token**: Visit [Cloudflare Dashboard](https://dash.cloudflare.com/) → Settings → API Tokens
+2. **Account ID**: Found in the top-left corner of the Cloudflare Dashboard
+
+Add to `.env.local`:
+
+```env
+CLOUDFLARE_API_TOKEN=your_api_token_here
+CLOUDFLARE_ACCOUNT_ID=your_account_id_here
+```
+
+### 3. Configure GitHub OAuth
+
+Set up GitHub OAuth application:
+
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+2. Create a new OAuth App
+3. Set callback URL to: `http://localhost:5173/api/auth/callback`
+4. Copy Client ID and Secret
+
+Add to `.env.local`:
+
+```env
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
+GITHUB_OAUTH_REDIRECT_URI=http://localhost:5173/api/auth/callback
+```
+
+### 4. Configure JWT Secret
+
+Generate a secure JWT secret:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Add to `.env.local`:
+
+```env
+JWT_SECRET=your_generated_secret_here
+```
+
+### 5. Optional Configuration
+
+Additional environment variables:
+
+```env
+# Solana RPC URL
+SOLANA_RPC_URL=https://api.devnet.solana.com
+
+# Environment
+NODE_ENV=development
+```
+
+## Database Setup
+
+### Run Database Migrations
+
+Orquestra uses Cloudflare D1 (SQLite) for data storage. Initialize the database:
+
+```bash
+npm run db:migrate:dev
+```
+
+This command runs the migration files:
+- `migrations/001_initial_schema.sql` - Creates core tables
+- `migrations/002_indexes.sql` - Adds database indexes
+
+The database includes tables for:
+- `users` - GitHub-authenticated users
+- `projects` - IDL projects
+- `idl_versions` - IDL version history
+- `api_keys` - API authentication keys
+- `project_socials` - Social media links
+- `known_addresses` - Project-specific addresses
+
+### Database Management Commands
+
+```bash
+# Seed test data
+npm run db:seed
+
+# Reset database (WARNING: deletes all data)
+npm run db:reset
+
+# Access local D1 shell
+cd packages/worker
+wrangler d1 shell orquestra-dev
+```
+
+## Starting Development Servers
+
+### Option 1: Start Everything (Recommended)
+
+Start both frontend and backend simultaneously:
+
+```bash
+npm run dev
+```
+
+This runs both servers in parallel:
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:8787
+
+### Option 2: Start Individually
+
+Run servers in separate terminals:
+
+**Terminal 1 - Frontend:**
+```bash
+npm run dev:frontend
+# React app with Vite at http://localhost:5173
+```
+
+**Terminal 2 - Backend:**
+```bash
+npm run dev:worker
+# Hono API at http://localhost:8787
+```
+
+### Verify Setup
+
+1. **Frontend**: Open http://localhost:5173
+2. **Backend Health**: Visit http://localhost:8787/health
+3. **Backend Ping**: Visit http://localhost:8787/health/ping
+
+Expected health response:
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-03-03T...",
+  "environment": "development"
+}
+```
+
+## Development Workflow
+
+### Available Scripts
+
+#### Development Commands
+
+```bash
+# Start all dev servers
+npm run dev
+
+# Start individual servers
+npm run dev:frontend    # Frontend only (port 5173)
+npm run dev:worker      # Backend only (port 8787)
+
+# Code quality checks
+npm run type-check      # TypeScript validation
+npm run lint            # ESLint check
+npm run lint:fix        # Auto-fix linting issues
+npm run format          # Prettier formatting
+```
+
+#### Build Commands
+
+```bash
+# Build all packages
+npm run build
+
+# Build individually
+npm run build:frontend  # Build React app
+npm run build:worker    # Build Cloudflare Worker
+```
+
+#### Database Commands
+
+```bash
+npm run db:migrate:dev  # Run migrations
+npm run db:seed         # Seed test data
+npm run db:reset        # Reset database
+```
+
+#### CLI Tools
+
+```bash
+# Scan Solana programs on-chain
+npm run cli:scan -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+
+# Check for on-chain IDLs
+npm run cli:check-idl -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+
+# Run full scan pipeline
+npm run cli:full -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+```
+
+#### Cleanup
+
+```bash
+# Remove build artifacts and dependencies
+npm run clean
+```
+
+### Hot Reload
+
+Both frontend and backend support hot module replacement:
+
+- **Frontend**: Vite provides instant HMR - changes appear immediately
+- **Backend**: Wrangler dev mode auto-reloads on file changes
+
+### Testing API Endpoints
+
+Test the backend API using curl or any HTTP client:
+
+```bash
+# Health check
+curl http://localhost:8787/health
+
+# Test authentication (example)
+curl http://localhost:8787/auth/github
+
+# Test with API key
+curl -H "X-API-Key: your_api_key" \
+  http://localhost:8787/api/your-project/instructions
+```
+
+## Troubleshooting
+
+### Port Already in Use
+
+If you see "Port already in use" errors:
+
+```bash
+# Find process using port 5173 (frontend)
+lsof -i :5173
+
+# Find process using port 8787 (backend)
+lsof -i :8787
+
+# Kill the process
+kill -9 <PID>
+```
+
+### Dependency Issues
+
+If you encounter dependency errors:
+
+```bash
+# Clear everything and reinstall
+npm run clean
+bun install
+```
+
+### Build Errors
+
+For TypeScript or linting errors:
+
+```bash
+# Check types across all packages
+npm run type-check
+
+# Auto-fix linting issues
+npm run lint:fix
+
+# Format code
+npm run format
+```
+
+### Database Migration Errors
+
+If migrations fail:
+
+```bash
+# Reset and rerun migrations
+npm run db:reset
+npm run db:migrate:dev
+```
+
+### Cloudflare Authentication Issues
+
+If you have Cloudflare authentication errors:
+
+```bash
+# Login to Cloudflare via wrangler
+wrangler login
+
+# Verify authentication
+wrangler whoami
+```
+
+### Environment Variable Issues
+
+Ensure your `.env.local` is properly configured and located in the project root.
+
+For Cloudflare Workers, secrets are managed separately:
+
+```bash
+# Set worker secrets (production)
+wrangler secret put GITHUB_OAUTH_SECRET
+wrangler secret put JWT_SECRET
+```
+
+## Next Steps
+
+Once your local environment is set up:
+
+1. Explore the [Project Structure](/development/project-structure) to understand the codebase
+2. Review the [Database Schema](/development/database-schema) to understand data models
+3. Check the [API Documentation](/api-reference) for available endpoints
+4. Read the [Contributing Guide](https://github.com/berkayozrunc/orquestra/blob/main/CONTRIBUTING.md)
+
+## Additional Resources
+
+- [SETUP_INSTRUCTIONS.md](https://github.com/berkayozrunc/orquestra/blob/main/docs/SETUP_INSTRUCTIONS.md) - Detailed setup guide (Turkish)
+- [Cloudflare Workers Docs](https://developers.cloudflare.com/workers/)
+- [Bun Documentation](https://bun.sh/docs)
+- [Hono Framework](https://hono.dev/)
+- [Vite Documentation](https://vitejs.dev/)

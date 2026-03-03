@@ -1,0 +1,359 @@
+---
+title: Installation
+description: Self-host Orquestra on Cloudflare Workers and Pages
+icon: download
+---
+
+# Installation
+
+This guide will walk you through setting up Orquestra for local development or deploying it to Cloudflare's edge network.
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- **Node.js** 18+ or **Bun** 1.0+
+- **Cloudflare account** (free tier works)
+- **GitHub account** (for OAuth authentication)
+- **Git** installed on your machine
+
+## Quick start
+
+The fastest way to get started is using the automated setup script:
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/berkayoztunc/orquestra.git
+    cd orquestra
+    ```
+  </Step>
+
+  <Step title="Run the quick start script">
+    ```bash
+    ./scripts/quick-start.sh
+    ```
+    
+    This script will:
+    - Install all dependencies
+    - Set up environment variables
+    - Create the local database
+    - Start the development servers
+  </Step>
+
+  <Step title="Access the application">
+    - **Frontend:** http://localhost:5173
+    - **API:** http://localhost:8787
+    - **API docs:** http://localhost:8787/health
+  </Step>
+</Steps>
+
+## Manual setup
+
+If you prefer to set up Orquestra manually:
+
+<Steps>
+  <Step title="Install dependencies">
+    <CodeGroup>
+      ```bash npm
+      npm run install:all
+      ```
+      
+      ```bash bun
+      bun install
+      ```
+      
+      ```bash yarn
+      yarn install
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env.local` file in the root directory:
+    
+    ```bash
+    cp .env.example .env.local
+    ```
+    
+    Then edit `.env.local` with your credentials:
+    
+    ```env
+    # Cloudflare
+    CLOUDFLARE_API_TOKEN=your_api_token_here
+    CLOUDFLARE_ACCOUNT_ID=your_account_id_here
+    
+    # GitHub OAuth
+    GITHUB_OAUTH_ID=your_github_oauth_id
+    GITHUB_OAUTH_SECRET=your_github_oauth_secret
+    
+    # JWT Secret (generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+    JWT_SECRET=your_jwt_secret_here
+    
+    # Solana RPC (optional, defaults to public endpoint)
+    SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+    ```
+    
+    <Accordion title="How to get Cloudflare credentials">
+      1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com/)
+      2. Navigate to **My Profile** → **API Tokens**
+      3. Click **Create Token**
+      4. Use the **Edit Cloudflare Workers** template
+      5. Copy the API token
+      6. Your Account ID is shown in the dashboard URL or under **Account Settings**
+    </Accordion>
+    
+    <Accordion title="How to set up GitHub OAuth">
+      1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+      2. Click **New OAuth App**
+      3. Fill in the details:
+         - **Application name:** Orquestra (or your choice)
+         - **Homepage URL:** `http://localhost:5173` (for development)
+         - **Authorization callback URL:** `http://localhost:8787/auth/github/callback`
+      4. Click **Register application**
+      5. Copy the **Client ID**
+      6. Generate a **Client Secret** and copy it
+    </Accordion>
+    
+    <Accordion title="Generate a JWT secret">
+      Run this command to generate a secure JWT secret:
+      
+      ```bash
+      node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+      ```
+      
+      Copy the output and use it as your `JWT_SECRET`.
+    </Accordion>
+  </Step>
+
+  <Step title="Set up the database">
+    Run database migrations to create the necessary tables:
+    
+    <CodeGroup>
+      ```bash npm
+      npm run db:migrate:dev
+      ```
+      
+      ```bash bun
+      bun run db:migrate:dev
+      ```
+    </CodeGroup>
+    
+    This creates the following tables:
+    - `users` - User accounts from GitHub OAuth
+    - `projects` - IDL projects
+    - `idl_versions` - IDL version history
+    - `api_keys` - API authentication keys
+    - `project_socials` - Project social links
+    - `known_addresses` - Labeled Solana addresses
+  </Step>
+
+  <Step title="Start the development servers">
+    You can start both servers together or separately:
+    
+    <Tabs>
+      <Tab title="Both servers">
+        ```bash
+        npm run dev
+        ```
+        
+        This starts:
+        - Frontend on http://localhost:5173
+        - Worker API on http://localhost:8787
+      </Tab>
+      
+      <Tab title="Separate terminals">
+        **Terminal 1 - Frontend:**
+        ```bash
+        npm run dev:frontend
+        ```
+        
+        **Terminal 2 - Worker:**
+        ```bash
+        npm run dev:worker
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Verify the setup">
+    Open your browser and navigate to:
+    - **Frontend:** http://localhost:5173
+    - **API health check:** http://localhost:8787/health
+    
+    You should see the Orquestra dashboard and a healthy API response.
+  </Step>
+</Steps>
+
+## Development workflow
+
+### Common commands
+
+<CodeGroup>
+  ```bash Development
+  npm run dev                      # Start all dev servers
+  npm run dev:frontend             # Start frontend only
+  npm run dev:worker               # Start worker only
+  ```
+  
+  ```bash Building
+  npm run build                    # Build all packages
+  npm run build:frontend           # Build frontend only
+  npm run build:worker             # Build worker only
+  ```
+  
+  ```bash Database
+  npm run db:migrate:dev           # Run migrations
+  npm run db:seed                  # Seed test data
+  npm run db:reset                 # Reset database
+  ```
+  
+  ```bash Code quality
+  npm run type-check               # TypeScript validation
+  npm run lint                     # ESLint check
+  npm run lint:fix                 # Auto-fix issues
+  npm run format                   # Prettier formatting
+  ```
+</CodeGroup>
+
+### Project structure
+
+Orquestra is organized as a monorepo:
+
+```
+orquestra/
+├── packages/
+│   ├── frontend/          # React SPA
+│   │   ├── src/
+│   │   │   ├── pages/     # Route pages
+│   │   │   ├── components/ # UI components
+│   │   │   └── store/     # Zustand state
+│   │   └── package.json
+│   │
+│   ├── worker/            # Hono API
+│   │   ├── src/
+│   │   │   ├── routes/    # API routes
+│   │   │   ├── services/  # Business logic
+│   │   │   └── middleware/ # Auth, caching
+│   │   └── package.json
+│   │
+│   ├── cli/               # CLI tools
+│   │   └── src/
+│   │       └── commands/  # CLI commands
+│   │
+│   └── shared/            # Shared code
+│       └── src/
+│           └── types.ts   # TypeScript types
+│
+├── migrations/            # Database schema
+└── scripts/               # Setup scripts
+```
+
+<Tip>
+  See [Project Structure](/development/project-structure) for a detailed breakdown of the codebase.
+</Tip>
+
+## Deploying to production
+
+Once you're ready to deploy Orquestra to production:
+
+<Steps>
+  <Step title="Build all packages">
+    ```bash
+    npm run build
+    ```
+  </Step>
+
+  <Step title="Deploy to Cloudflare">
+    ```bash
+    npm run deploy
+    ```
+    
+    This deploys:
+    - Worker API to Cloudflare Workers
+    - Frontend to Cloudflare Pages
+  </Step>
+
+  <Step title="Run production migrations">
+    ```bash
+    npm run db:migrate
+    ```
+  </Step>
+
+  <Step title="Set production secrets">
+    ```bash
+    wrangler secret put GITHUB_OAUTH_SECRET
+    wrangler secret put JWT_SECRET
+    ```
+  </Step>
+</Steps>
+
+<Info>
+  For detailed deployment instructions, see the [Deployment Guide](/deployment/overview).
+</Info>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Port already in use">
+    If you see an error about ports 5173 or 8787 being in use:
+    
+    ```bash
+    # Find the process using the port
+    lsof -i :5173
+    lsof -i :8787
+    
+    # Kill the process
+    kill -9 <PID>
+    ```
+  </Accordion>
+  
+  <Accordion title="Dependencies installation fails">
+    If dependencies fail to install:
+    
+    ```bash
+    # Clear cache and reinstall
+    npm run clean
+    npm run install:all
+    ```
+  </Accordion>
+  
+  <Accordion title="Database migration errors">
+    If migrations fail:
+    
+    ```bash
+    # Reset the database and try again
+    npm run db:reset
+    npm run db:migrate:dev
+    ```
+  </Accordion>
+  
+  <Accordion title="TypeScript errors">
+    If you see TypeScript errors:
+    
+    ```bash
+    # Run type checking
+    npm run type-check
+    
+    # Fix linting issues
+    npm run lint:fix
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart guide" icon="play" href="/quickstart">
+    Learn how to use Orquestra with a practical example
+  </Card>
+  <Card title="Core concepts" icon="book" href="/concepts/how-it-works">
+    Understand how Orquestra works under the hood
+  </Card>
+  <Card title="Deployment" icon="cloud" href="/deployment/overview">
+    Deploy Orquestra to production
+  </Card>
+  <Card title="API reference" icon="code" href="/api/overview">
+    Explore the REST API documentation
+  </Card>
+</CardGroup>

@@ -1,80 +1,343 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with Orquestra in 5 minutes
+icon: play
 ---
 
-## Get started in three steps
+# Quickstart
 
-Get your documentation site running locally and make your first customization.
+This guide will get you up and running with Orquestra in just a few minutes. You'll sign in, upload an IDL, and build your first transaction.
 
-### Step 1: Set up your local environment
+<Note>
+  This quickstart assumes you're using the hosted version of Orquestra. If you want to self-host, see the [Installation guide](/installation).
+</Note>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+## Step 1: Sign in with GitHub
+
+Orquestra uses GitHub OAuth for authentication.
+
+<Steps>
+  <Step title="Navigate to Orquestra">
+    Go to the Orquestra dashboard (or `http://localhost:5173` if running locally).
+  </Step>
+
+  <Step title="Click 'Sign in with GitHub'">
+    You'll be redirected to GitHub to authorize the application.
+  </Step>
+
+  <Step title="Authorize the app">
+    Grant Orquestra access to your GitHub profile. This is used to create your account and manage your projects.
+  </Step>
+
+  <Step title="Return to dashboard">
+    After authorization, you'll be redirected back to Orquestra with an active session.
+  </Step>
+</Steps>
+
+## Step 2: Upload your first IDL
+
+Now let's upload a Solana Anchor IDL to generate REST APIs.
+
+<Steps>
+  <Step title="Prepare your IDL">
+    You'll need an Anchor IDL file (JSON format). If you don't have one, you can use this example:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```json
+    {
+      "version": "0.1.0",
+      "name": "counter",
+      "instructions": [
+        {
+          "name": "initialize",
+          "accounts": [
+            {
+              "name": "counter",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "user",
+              "isMut": true,
+              "isSigner": true
+            },
+            {
+              "name": "systemProgram",
+              "isMut": false,
+              "isSigner": false
+            }
+          ],
+          "args": [
+            {
+              "name": "initialValue",
+              "type": "u64"
+            }
+          ]
+        },
+        {
+          "name": "increment",
+          "accounts": [
+            {
+              "name": "counter",
+              "isMut": true,
+              "isSigner": false
+            }
+          ],
+          "args": []
+        }
+      ],
+      "accounts": [
+        {
+          "name": "Counter",
+          "type": {
+            "kind": "struct",
+            "fields": [
+              {
+                "name": "count",
+                "type": "u64"
+              }
+            ]
+          }
+        }
+      ]
+    }
+    ```
+  </Step>
+
+  <Step title="Navigate to Upload">
+    Click **Upload IDL** in the dashboard.
+  </Step>
+
+  <Step title="Fill in project details">
+    - **Project name:** `my-counter`
+    - **Program ID:** Your Solana program ID (e.g., `11111111111111111111111111111111`)
+    - **IDL file:** Select your IDL JSON file
+    - **Visibility:** Choose public or private
+  </Step>
+
+  <Step title="Submit">
+    Click **Upload** and wait for processing. Orquestra will:
+    - Validate the IDL structure
+    - Parse instructions and accounts
+    - Generate REST endpoints
+    - Create AI-optimized documentation
+  </Step>
+</Steps>
+
+<Tip>
+  The IDL file can be up to 10 MB. For CPI documentation, you can upload an additional 5 MB Markdown file.
+</Tip>
+
+## Step 3: Explore your API
+
+Once uploaded, your project has auto-generated endpoints:
+
+<Tabs>
+  <Tab title="List instructions">
+    ```bash
+    curl https://api.orquestra.dev/api/my-counter/instructions
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    Response:
+    ```json
+    {
+      "instructions": [
+        {
+          "name": "initialize",
+          "accounts": [...],
+          "args": [...]
+        },
+        {
+          "name": "increment",
+          "accounts": [...],
+          "args": []
+        }
+      ]
+    }
+    ```
+  </Tab>
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+  <Tab title="Get instruction details">
+    ```bash
+    curl https://api.orquestra.dev/api/my-counter/instructions/initialize
+    ```
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    Response:
+    ```json
+    {
+      "name": "initialize",
+      "accounts": [
+        {
+          "name": "counter",
+          "isMut": true,
+          "isSigner": false
+        },
+        ...
+      ],
+      "args": [
+        {
+          "name": "initialValue",
+          "type": "u64"
+        }
+      ]
+    }
+    ```
+  </Tab>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Tab title="List accounts">
+    ```bash
+    curl https://api.orquestra.dev/api/my-counter/accounts
+    ```
+    
+    Response:
+    ```json
+    {
+      "accounts": [
+        {
+          "name": "Counter",
+          "discriminator": [255, 176, 4, 245, 188, 253, 124, 25],
+          "type": {
+            "kind": "struct",
+            "fields": [
+              {
+                "name": "count",
+                "type": "u64"
+              }
+            ]
+          }
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Step 4: Build a transaction
 
-### Step 3: Go live
+Now let's build a transaction for the `initialize` instruction:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+```bash
+curl -X POST https://api.orquestra.dev/api/my-counter/instructions/initialize/build \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "accounts": {
+      "counter": "COUNTER_PUBKEY_HERE",
+      "user": "YOUR_WALLET_PUBKEY",
+      "systemProgram": "11111111111111111111111111111111"
+    },
+    "args": {
+      "initialValue": 0
+    }
+  }'
+```
+
+Response:
+
+```json
+{
+  "transaction": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQADBa...",
+  "accounts": [
+    {
+      "pubkey": "COUNTER_PUBKEY_HERE",
+      "isSigner": false,
+      "isWritable": true
+    },
+    ...
+  ],
+  "instructionData": "AfQvvPT8fBkAAAAAAAAAA==",
+  "estimatedFee": 5000
+}
+```
+
+<Info>
+  The `transaction` field contains a base58-encoded transaction ready for signing with your wallet.
+</Info>
+
+## Step 5: Get AI-ready documentation
+
+Orquestra automatically generates Markdown documentation optimized for AI agents:
+
+```bash
+curl https://api.orquestra.dev/api/my-counter/docs
+```
+
+This returns structured documentation including:
+- All instructions with parameters
+- Account schemas
+- Custom types and enums
+- Error codes
+- Usage examples
+
+<Tip>
+  You can also view the documentation in your browser at `/api/my-counter/docs`.
+</Tip>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Upload IDL guide" icon="upload" href="/guides/uploading-idl">
+    Learn advanced IDL management techniques
+  </Card>
+  <Card title="Build transactions" icon="hammer" href="/guides/building-transactions">
+    Master transaction building with complex types
+  </Card>
+  <Card title="API keys" icon="key" href="/guides/api-keys">
+    Create and manage API keys for programmatic access
+  </Card>
+  <Card title="API reference" icon="code" href="/api/overview">
+    Explore the complete REST API
+  </Card>
 </CardGroup>
 
+## Using with JavaScript/TypeScript
+
+Here's a complete example using JavaScript:
+
+```javascript
+// 1. Upload IDL
+const uploadResponse = await fetch('https://api.orquestra.dev/api/idl/upload', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${JWT_TOKEN}`
+  },
+  body: JSON.stringify({
+    name: 'my-counter',
+    programId: '11111111111111111111111111111111',
+    idl: { /* IDL object */ },
+    isPublic: true
+  })
+});
+
+const { projectId } = await uploadResponse.json();
+
+// 2. Build transaction
+const buildResponse = await fetch(`https://api.orquestra.dev/api/${projectId}/instructions/initialize/build`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': API_KEY
+  },
+  body: JSON.stringify({
+    accounts: {
+      counter: counterPubkey,
+      user: walletPubkey,
+      systemProgram: SystemProgram.programId
+    },
+    args: {
+      initialValue: 0
+    }
+  })
+});
+
+const { transaction } = await buildResponse.json();
+
+// 3. Sign and send transaction
+const tx = Transaction.from(Buffer.from(transaction, 'base64'));
+const signature = await wallet.signAndSendTransaction(tx);
+console.log('Transaction signature:', signature);
+```
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  For more examples in different languages, see the [API Reference](/api/overview).
 </Note>

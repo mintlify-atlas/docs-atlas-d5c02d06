@@ -1,0 +1,551 @@
+---
+title: AI-Optimized Documentation
+description: Auto-generated Markdown documentation designed for AI agents and LLMs
+---
+
+# AI-Optimized Documentation
+
+Orquestra automatically generates comprehensive Markdown documentation from your Anchor IDL, optimized for consumption by AI agents, LLMs, and automated tools. This guide explains how to access and use these AI-ready docs.
+
+## Overview
+
+When you upload an IDL, Orquestra generates structured documentation that includes:
+
+- Program overview and metadata
+- Complete instruction reference with examples
+- Account type definitions
+- Custom type structures
+- Error codes with descriptions
+- Event schemas
+- API endpoint examples
+- CPI integration guides
+
+<Note>
+Documentation is automatically regenerated whenever you update your IDL.
+</Note>
+
+## Accessing Documentation
+
+### Via API
+
+<CodeGroup>
+```bash JSON Format
+curl https://api.orquestra.so/api/{projectId}/docs
+```
+
+```bash Markdown Format
+curl https://api.orquestra.so/api/{projectId}/docs?format=markdown
+```
+
+```bash Alternative
+curl https://api.orquestra.so/api/{projectId}/docs?format=md
+```
+</CodeGroup>
+
+### Response Structure (JSON)
+
+```json
+{
+  "projectId": "abc123xyz",
+  "docs": "# Program Name\n\n> Auto-generated...",
+  "isCustom": false,
+  "sections": {
+    "overview": "# Program Name\n\n...",
+    "instructions": "## Instructions\n\n...",
+    "accounts": "## Account Types\n\n...",
+    "types": "## Types\n\n...",
+    "errors": "## Error Codes\n\n...",
+    "events": "## Events\n\n..."
+  }
+}
+```
+
+### Response Structure (Markdown)
+
+```markdown
+# Token Staking Program
+
+> Auto-generated documentation from Anchor IDL
+
+**Program ID:** `StakeProgram11111111111111111111111111111111`
+**Version:** 0.1.0
+**API Base:** `https://api.orquestra.so/api/abc123xyz`
+
+## Summary
+
+| Item | Count |
+|------|-------|
+| Instructions | 5 |
+| Accounts | 3 |
+| Types | 2 |
+| Errors | 8 |
+| Events | 2 |
+
+...
+```
+
+## Documentation Structure
+
+The generated documentation follows a consistent, hierarchical structure:
+
+### 1. Overview Section
+
+Provides high-level program information:
+
+```markdown
+# Program Name
+
+> Auto-generated documentation from Anchor IDL
+
+**Program ID:** `YourProgramID...`
+**Version:** 0.1.0
+**API Base:** `https://api.orquestra.so/api/{projectId}`
+
+## Summary
+
+| Item | Count |
+|------|-------|
+| Instructions | 5 |
+| Accounts | 3 |
+| Types | 2 |
+| Errors | 8 |
+| Events | 2 |
+
+## Quick Start
+
+### List all instructions
+```bash
+curl https://api.orquestra.so/api/{projectId}/instructions
+```
+```
+
+### 2. Instructions Section
+
+Detailed instruction documentation with:
+
+- Instruction name and description (from `docs` field)
+- API endpoint URL
+- Accounts table (name, mutability, signer status, PDA info)
+- Arguments table with types
+- Expanded struct definitions for complex arguments
+- Complete cURL example
+
+```markdown
+## Instructions
+
+### `initialize`
+
+Initializes a new staking vault for the user.
+
+**Endpoint:** `POST https://api.orquestra.so/api/{projectId}/instructions/initialize/build`
+
+#### Accounts
+
+| Name | Writable | Signer | Optional | PDA |
+|------|----------|--------|----------|-----|
+| `vault` | ✅ | ❌ | ❌ | "vault", user, vault_id |
+| `user` | ✅ | ✅ | ❌ | - |
+| `systemProgram` | ❌ | ❌ | ❌ | - |
+
+#### Arguments
+
+| Name | Type |
+|------|------|
+| `vaultId` | `u64` |
+| `params` | `InitParams` |
+
+##### `params` — `InitParams` (struct)
+
+| Field | Type |
+|-------|------|
+| `duration` | `i64` |
+| `rate` | `u16` |
+
+#### Example
+
+```bash
+curl -X POST https://api.orquestra.so/api/{projectId}/instructions/initialize/build \
+  -H "Content-Type: application/json" \
+  -d '{
+    "accounts": {
+      "vault": "<pubkey>",
+      "user": "<pubkey>",
+      "systemProgram": "<pubkey>"
+    },
+    "args": {
+      "vaultId": <u64>,
+      "params": {
+        "duration": <i64>,
+        "rate": <u16>
+      }
+    },
+    "feePayer": "<your_pubkey>"
+  }'
+```
+```
+
+### 3. Account Types Section
+
+Defines on-chain account structures:
+
+```markdown
+## Account Types
+
+### `StakeAccount`
+
+Stores user staking information.
+
+| Field | Type |
+|-------|------|
+| `owner` | `publicKey` |
+| `amount` | `u64` |
+| `startTime` | `i64` |
+| `rate` | `u16` |
+```
+
+### 4. Types Section
+
+Custom type definitions:
+
+```markdown
+## Types
+
+### `InitParams`
+
+**Kind:** struct
+
+| Field | Type |
+|-------|------|
+| `duration` | `i64` |
+| `rate` | `u16` |
+| `autoRenew` | `bool` |
+```
+
+### 5. Errors Section
+
+Error codes and messages:
+
+```markdown
+## Error Codes
+
+| Code | Name | Message |
+|------|------|----------|
+| 6000 | `InvalidAmount` | The amount must be greater than zero |
+| 6001 | `VaultNotActive` | The vault is not active |
+```
+
+### 6. Events Section
+
+Event schemas:
+
+```markdown
+## Events
+
+### `StakeCreated`
+
+| Field | Type |
+|-------|------|
+| `user` | `publicKey` |
+| `amount` | `u64` |
+| `timestamp` | `i64` |
+```
+
+### 7. CPI Integration (Optional)
+
+If you provided CPI documentation during upload, it's appended:
+
+```markdown
+---
+
+## CPI Integration
+
+# Calling from Another Program
+
+To invoke this program via CPI:
+
+```rust
+use anchor_lang::prelude::*;
+use my_program::cpi::accounts::Initialize;
+
+// ... CPI code example
+```
+```
+
+## Using Docs with AI Agents
+
+The documentation is designed for easy consumption by AI:
+
+### 1. Context Loading
+
+Provide the full documentation as context to an LLM:
+
+```typescript
+const docs = await fetch(
+  `https://api.orquestra.so/api/${projectId}/docs?format=markdown`
+).then((r) => r.text());
+
+const messages = [
+  {
+    role: 'system',
+    content: `You are a Solana development assistant. Here is the program documentation:\n\n${docs}`,
+  },
+  {
+    role: 'user',
+    content: 'How do I initialize a staking vault?',
+  },
+];
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages,
+});
+```
+
+### 2. Section-Specific Context
+
+For focused queries, use specific sections:
+
+```typescript
+const { sections } = await fetch(
+  `https://api.orquestra.so/api/${projectId}/docs`
+).then((r) => r.json());
+
+// Only load instructions documentation
+const context = sections.instructions;
+```
+
+### 3. AI-Powered Code Generation
+
+Example: Generate transaction building code
+
+<CodeGroup>
+```typescript OpenAI
+import OpenAI from 'openai';
+
+const openai = new OpenAI();
+
+const docs = await fetch(
+  `https://api.orquestra.so/api/${projectId}/docs?format=markdown`
+).then((r) => r.text());
+
+const completion = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages: [
+    {
+      role: 'system',
+      content: `You are a Solana development assistant. Here is the program documentation:\n\n${docs}`,
+    },
+    {
+      role: 'user',
+      content:
+        'Generate TypeScript code to build an initialize transaction with amount=1000',
+    },
+  ],
+});
+
+console.log(completion.choices[0].message.content);
+```
+
+```python Anthropic Claude
+import anthropic
+import requests
+
+client = anthropic.Anthropic()
+
+docs = requests.get(
+    f"https://api.orquestra.so/api/{project_id}/docs?format=markdown"
+).text
+
+message = client.messages.create(
+    model="claude-3-5-sonnet-20241022",
+    max_tokens=1024,
+    messages=[
+        {
+            "role": "user",
+            "content": f"Here is a Solana program's documentation:\n\n{docs}\n\nGenerate Python code to build an initialize transaction.",
+        }
+    ],
+)
+
+print(message.content)
+```
+</CodeGroup>
+
+### 4. RAG (Retrieval-Augmented Generation)
+
+Use documentation as a knowledge base:
+
+```typescript
+import { OpenAIEmbeddings } from '@langchain/openai';
+import { MemoryVectorStore } from 'langchain/vectorstores/memory';
+import { Document } from 'langchain/document';
+
+// Fetch documentation
+const { sections } = await fetch(
+  `https://api.orquestra.so/api/${projectId}/docs`
+).then((r) => r.json());
+
+// Create documents for each section
+const documents = Object.entries(sections).map(
+  ([key, content]) =>
+    new Document({
+      pageContent: content as string,
+      metadata: { section: key },
+    })
+);
+
+// Create vector store
+const vectorStore = await MemoryVectorStore.fromDocuments(
+  documents,
+  new OpenAIEmbeddings()
+);
+
+// Query
+const results = await vectorStore.similaritySearch(
+  'How do I stake tokens?',
+  2
+);
+```
+
+## Custom Documentation
+
+You can override auto-generated docs with your own content:
+
+### Upload Custom Docs
+
+```bash
+curl -X PUT https://api.orquestra.so/api/{projectId}/docs \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "docs": "# My Custom Documentation\n\n..."
+  }'
+```
+
+<Note>
+Custom documentation replaces the auto-generated version. Maximum size: 1 MB.
+</Note>
+
+### Reset to Auto-Generated
+
+Revert to auto-generated docs:
+
+```bash
+curl -X DELETE https://api.orquestra.so/api/{projectId}/docs \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+## Caching and Performance
+
+### Cache Headers
+
+Documentation responses include cache metadata:
+
+```json
+{
+  "projectId": "abc123xyz",
+  "docs": "...",
+  "isCustom": false,
+  "source": "cache"
+}
+```
+
+- `source: "cache"`: Documentation served from cache (7-day TTL)
+- `source: undefined`: Freshly generated
+
+### Best Practices
+
+1. **Cache locally**: Store documentation in your application to reduce API calls
+2. **Check for updates**: Fetch docs periodically or when IDL versions change
+3. **Use sections**: Only fetch needed sections for specific use cases
+4. **Compress for LLM context**: Summarize or extract relevant parts for token efficiency
+
+## Example: AI-Powered CLI Tool
+
+Building an AI assistant that helps users interact with your program:
+
+```typescript
+import OpenAI from 'openai';
+import * as readline from 'readline';
+
+const openai = new OpenAI();
+const projectId = 'your_project_id';
+
+// Load documentation once
+const docs = await fetch(
+  `https://api.orquestra.so/api/${projectId}/docs?format=markdown`
+).then((r) => r.text());
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+const messages: any[] = [
+  {
+    role: 'system',
+    content: `You are an assistant for a Solana program. Help users build transactions.\n\nProgram Documentation:\n${docs}`,
+  },
+];
+
+function ask() {
+  rl.question('You: ', async (input) => {
+    if (input === 'exit') {
+      rl.close();
+      return;
+    }
+
+    messages.push({ role: 'user', content: input });
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages,
+    });
+
+    const assistant = response.choices[0].message.content;
+    messages.push({ role: 'assistant', content: assistant });
+
+    console.log(`Assistant: ${assistant}\n`);
+    ask();
+  });
+}
+
+console.log('AI Assistant ready! Type "exit" to quit.\n');
+ask();
+```
+
+## Advanced: Multi-Program Context
+
+For AI agents working with multiple programs:
+
+```typescript
+const projectIds = ['project1', 'project2', 'project3'];
+
+const allDocs = await Promise.all(
+  projectIds.map((id) =>
+    fetch(`https://api.orquestra.so/api/${id}/docs?format=markdown`).then((r) =>
+      r.text()
+    )
+  )
+);
+
+const combinedContext = allDocs
+  .map((doc, i) => `## Program ${i + 1}\n\n${doc}`)
+  .join('\n\n---\n\n');
+
+// Use combinedContext for multi-program AI interactions
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Building Transactions" icon="hammer" href="/guides/building-transactions">
+    Use AI-generated code to build transactions
+  </Card>
+  <Card title="Uploading IDLs" icon="upload" href="/guides/uploading-idl">
+    Learn about IDL management and CPI docs
+  </Card>
+  <Card title="API Reference" icon="book" href="/api-reference">
+    Full API documentation
+  </Card>
+</CardGroup>

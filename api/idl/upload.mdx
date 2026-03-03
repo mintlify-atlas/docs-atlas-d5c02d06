@@ -1,0 +1,300 @@
+---
+title: 'Upload IDL'
+api: 'POST /api/idl/upload'
+description: 'Create a new project with an IDL file'
+---
+
+## Overview
+
+Uploads a new IDL (Interface Description Language) file and creates a project. This endpoint validates the IDL structure, checks for duplicates, and generates documentation automatically.
+
+## Authentication
+
+This endpoint requires authentication. Include a valid bearer token in the Authorization header.
+
+## Rate Limiting
+
+This endpoint is rate-limited to prevent abuse. Upload rate limits apply per user.
+
+## Request Body
+
+<ParamField body="name" type="string" required>
+  Project name. Will be slugified for URLs (e.g., "My Project" becomes "my-project").
+</ParamField>
+
+<ParamField body="programId" type="string" required>
+  Solana program ID. Must be unique per user - attempting to upload an IDL for an existing program ID will return a 409 error.
+</ParamField>
+
+<ParamField body="idl" type="object" required>
+  The IDL JSON object. Must conform to Anchor IDL structure. Maximum size: 10MB.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional project description.
+</ParamField>
+
+<ParamField body="cpiMd" type="string">
+  Optional CPI (Cross-Program Invocation) documentation in Markdown format. Maximum size: 5MB.
+</ParamField>
+
+<ParamField body="isPublic" type="boolean" default={true}>
+  Whether the project should be publicly visible. Defaults to `true`.
+</ParamField>
+
+## Response
+
+<ResponseField name="project" type="object">
+  Created project information.
+  
+  <ResponseField name="project.id" type="string">
+    Unique project identifier.
+  </ResponseField>
+  
+  <ResponseField name="project.name" type="string">
+    Project name.
+  </ResponseField>
+  
+  <ResponseField name="project.slug" type="string">
+    URL-friendly project slug.
+  </ResponseField>
+  
+  <ResponseField name="project.programId" type="string">
+    Solana program ID.
+  </ResponseField>
+  
+  <ResponseField name="project.isPublic" type="boolean">
+    Public visibility status.
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="idl" type="object">
+  IDL version and metadata.
+  
+  <ResponseField name="idl.versionId" type="string">
+    Version identifier.
+  </ResponseField>
+  
+  <ResponseField name="idl.version" type="number">
+    Version number (starts at 1).
+  </ResponseField>
+  
+  <ResponseField name="idl.programName" type="string">
+    Program name extracted from IDL.
+  </ResponseField>
+  
+  <ResponseField name="idl.instructionCount" type="number">
+    Number of instructions in the IDL.
+  </ResponseField>
+  
+  <ResponseField name="idl.accountCount" type="number">
+    Number of account types defined.
+  </ResponseField>
+  
+  <ResponseField name="idl.errorCount" type="number">
+    Number of custom errors defined.
+  </ResponseField>
+  
+  <ResponseField name="idl.eventCount" type="number">
+    Number of events defined.
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="validation" type="object">
+  Validation results.
+  
+  <ResponseField name="validation.warnings" type="array">
+    Non-critical validation warnings.
+  </ResponseField>
+</ResponseField>
+
+## Error Codes
+
+<ResponseField name="400" type="Bad Request">
+  **Missing required fields**: `name`, `programId`, or `idl` not provided.
+  
+  **IDL size exceeded**: IDL exceeds 10MB limit.
+  
+  **CPI.md size exceeded**: CPI.md exceeds 5MB limit.
+  
+  **Invalid IDL structure**: IDL validation failed. Response includes `details` and `warnings` fields.
+</ResponseField>
+
+<ResponseField name="401" type="Unauthorized">
+  Missing or invalid authentication token.
+</ResponseField>
+
+<ResponseField name="409" type="Conflict">
+  Project already exists for this program ID. Response includes `existingProjectId`.
+</ResponseField>
+
+<ResponseField name="429" type="Too Many Requests">
+  Rate limit exceeded. Wait before retrying.
+</ResponseField>
+
+<ResponseField name="500" type="Internal Server Error">
+  Server error during upload. Response includes error `details`.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.orquestra.dev/api/idl/upload \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -d '{
+    "name": "My Token Program",
+    "description": "A custom SPL token implementation",
+    "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "idl": {
+      "version": "0.1.0",
+      "name": "my_token_program",
+      "instructions": [
+        {
+          "name": "initialize",
+          "accounts": [
+            {
+              "name": "mint",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "authority",
+              "isMut": false,
+              "isSigner": true
+            }
+          ],
+          "args": [
+            {
+              "name": "decimals",
+              "type": "u8"
+            }
+          ]
+        }
+      ],
+      "accounts": [],
+      "types": [],
+      "errors": [],
+      "events": []
+    },
+    "isPublic": true
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.orquestra.dev/api/idl/upload', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_API_TOKEN'
+  },
+  body: JSON.stringify({
+    name: 'My Token Program',
+    description: 'A custom SPL token implementation',
+    programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    idl: {
+      version: '0.1.0',
+      name: 'my_token_program',
+      instructions: [/* ... */],
+      accounts: [],
+      types: [],
+      errors: [],
+      events: []
+    },
+    isPublic: true
+  })
+});
+
+const data = await response.json();
+console.log(data);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.orquestra.dev/api/idl/upload',
+    headers={
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer YOUR_API_TOKEN'
+    },
+    json={
+        'name': 'My Token Program',
+        'description': 'A custom SPL token implementation',
+        'programId': 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+        'idl': {
+            'version': '0.1.0',
+            'name': 'my_token_program',
+            'instructions': [],
+            'accounts': [],
+            'types': [],
+            'errors': [],
+            'events': []
+        },
+        'isPublic': True
+    }
+)
+
+print(response.json())
+```
+</CodeGroup>
+
+### Success Response (201)
+
+```json
+{
+  "project": {
+    "id": "abc123def456",
+    "name": "My Token Program",
+    "slug": "my-token-program",
+    "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "isPublic": true
+  },
+  "idl": {
+    "versionId": "xyz789uvw012",
+    "version": 1,
+    "programName": "my_token_program",
+    "instructionCount": 1,
+    "accountCount": 0,
+    "errorCount": 0,
+    "eventCount": 0
+  },
+  "validation": {
+    "warnings": []
+  }
+}
+```
+
+### Error Response (409 - Duplicate)
+
+```json
+{
+  "error": "Project already exists for this program ID",
+  "existingProjectId": "existing123"
+}
+```
+
+### Error Response (400 - Invalid IDL)
+
+```json
+{
+  "error": "Invalid IDL structure",
+  "details": [
+    "Missing required field: version",
+    "Instructions array cannot be empty"
+  ],
+  "warnings": [
+    "Consider adding error definitions for better debugging"
+  ]
+}
+```
+
+## Behavior Notes
+
+- The endpoint automatically generates documentation from the IDL and caches it for 7 days
+- IDL data is stored both in the database and KV cache for fast retrieval
+- A default socials entry is created for the project
+- The first version is always numbered as version 1
+- Project names are automatically slugified for URL-friendly identifiers
+- Duplicate program IDs per user are not allowed (returns 409)

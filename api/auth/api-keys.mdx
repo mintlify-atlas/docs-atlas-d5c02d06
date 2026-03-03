@@ -1,0 +1,476 @@
+---
+title: 'API Keys'
+description: 'Authenticate programmatic access with project-scoped API keys'
+---
+
+## Overview
+
+API keys provide project-scoped authentication for programmatic access to Orquestra. Unlike JWTs, which are user-scoped and short-lived, API keys are permanent (or have custom expiration) and tied to a specific project.
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="CI/CD Pipelines" icon="gears">
+    Automate transaction building and testing in your deployment workflows.
+  </Card>
+  
+  <Card title="Backend Services" icon="server">
+    Server-to-server API calls without user authentication.
+  </Card>
+  
+  <Card title="Bots & Automation" icon="robot">
+    Automated scripts and tools that interact with your Solana program.
+  </Card>
+  
+  <Card title="Third-Party Integrations" icon="puzzle-piece">
+    Share access with external services without exposing user credentials.
+  </Card>
+</CardGroup>
+
+## Authentication
+
+API keys use the `X-API-Key` header for authentication:
+
+```bash
+curl https://api.orquestra.so/api/my-project/instructions/transfer/build \
+  -H "X-API-Key: b58_abc123def456..." \
+  -H "Content-Type: application/json" \
+  -d '{ ... }'
+```
+
+## Create API Key
+
+Generate a new API key for a project.
+
+### Endpoint
+
+```
+POST /api/projects/:projectId/keys
+```
+
+### Authentication
+
+Requires JWT authentication. Only project owners can create API keys.
+
+### Request Body
+
+<ParamField body="expiresInDays" type="number">
+  Optional expiration time in days. If not provided, the key never expires.
+  
+  Example: `90` for a 90-day expiration
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  API key ID
+</ResponseField>
+
+<ResponseField name="key" type="string">
+  The API key (only shown once)
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  Creation timestamp (ISO 8601)
+</ResponseField>
+
+<ResponseField name="expiresAt" type="string | null">
+  Expiration timestamp (ISO 8601) or null if never expires
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Warning to store the key securely
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.orquestra.so/api/my-project/keys \
+  -H "Authorization: Bearer <your_jwt_token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "expiresInDays": 90 }'
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.orquestra.so/api/my-project/keys',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${userToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ expiresInDays: 90 })
+  }
+);
+
+const { key } = await response.json();
+
+// Store this securely - it won't be shown again!
+console.log('API Key:', key);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.orquestra.so/api/my-project/keys',
+    headers={'Authorization': f'Bearer {user_token}'},
+    json={'expiresInDays': 90}
+)
+
+data = response.json()
+api_key = data['key']
+
+# Store this securely!
+print('API Key:', api_key)
+```
+
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "id": "key_abc123",
+  "key": "b58_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "createdAt": "2024-01-15T10:30:00Z",
+  "expiresAt": "2024-04-15T10:30:00Z",
+  "message": "Store this key securely. It will not be shown again."
+}
+```
+
+<Warning>
+  The API key is only returned once during creation. Store it securely - you cannot retrieve it again.
+</Warning>
+
+## List API Keys
+
+Retrieve all API keys for a project.
+
+### Endpoint
+
+```
+GET /api/projects/:projectId/keys
+```
+
+### Authentication
+
+Requires JWT authentication. Only project owners can list API keys.
+
+### Response
+
+<ResponseField name="keys" type="array">
+  List of API keys
+  
+  <Expandable title="API Key Object">
+    <ResponseField name="id" type="string">
+      API key ID
+    </ResponseField>
+    
+    <ResponseField name="key" type="string">
+      Masked key showing only last 8 characters
+    </ResponseField>
+    
+    <ResponseField name="last_used" type="string | null">
+      Last usage timestamp (ISO 8601) or null if never used
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="string">
+      Creation timestamp (ISO 8601)
+    </ResponseField>
+    
+    <ResponseField name="expires_at" type="string | null">
+      Expiration timestamp (ISO 8601) or null if never expires
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```bash cURL
+curl https://api.orquestra.so/api/my-project/keys \
+  -H "Authorization: Bearer <your_jwt_token>"
+```
+
+### Response Example
+
+```json
+{
+  "keys": [
+    {
+      "id": "key_abc123",
+      "key": "************************0f00a08",
+      "last_used": "2024-01-20T15:45:00Z",
+      "created_at": "2024-01-15T10:30:00Z",
+      "expires_at": "2024-04-15T10:30:00Z"
+    },
+    {
+      "id": "key_xyz789",
+      "key": "************************a3d5e7f",
+      "last_used": null,
+      "created_at": "2024-01-18T08:20:00Z",
+      "expires_at": null
+    }
+  ]
+}
+```
+
+## Delete API Key
+
+Revoke an API key immediately.
+
+### Endpoint
+
+```
+DELETE /api/projects/:projectId/keys/:keyId
+```
+
+### Authentication
+
+Requires JWT authentication. Only project owners can delete API keys.
+
+### Example
+
+```bash cURL
+curl -X DELETE https://api.orquestra.so/api/my-project/keys/key_abc123 \
+  -H "Authorization: Bearer <your_jwt_token>"
+```
+
+### Response Example
+
+```json
+{
+  "message": "API key deleted"
+}
+```
+
+## Rotate API Key
+
+Generate a new key value for an existing key ID.
+
+### Endpoint
+
+```
+POST /api/projects/:projectId/keys/:keyId/rotate
+```
+
+### Authentication
+
+Requires JWT authentication. Only project owners can rotate API keys.
+
+### Response
+
+<ResponseField name="id" type="string">
+  API key ID (unchanged)
+</ResponseField>
+
+<ResponseField name="key" type="string">
+  New API key value (only shown once)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Warning to store the new key
+</ResponseField>
+
+### Example
+
+```bash cURL
+curl -X POST https://api.orquestra.so/api/my-project/keys/key_abc123/rotate \
+  -H "Authorization: Bearer <your_jwt_token>"
+```
+
+### Response Example
+
+```json
+{
+  "id": "key_abc123",
+  "key": "b58_7d865e959b2466918c9863afca942d0fb89d7c9ac0c99bafc3749504ded97730",
+  "message": "API key rotated successfully. Store the new key — it will not be shown again."
+}
+```
+
+## Using API Keys
+
+API keys are validated using the `apiKeyMiddleware` and provide project-scoped access.
+
+### Middleware Behavior
+
+1. Extracts the API key from the `X-API-Key` header
+2. Queries the database for a matching key
+3. Checks expiration (`expires_at` must be null or in the future)
+4. Updates `last_used` timestamp
+5. Sets context variables:
+   - `apiKeyProjectId`: The project ID
+   - `apiKeyUserId`: The user ID who owns the project
+
+### Supported Endpoints
+
+<Note>
+  Currently, API keys are primarily used for project management endpoints. Transaction building and PDA derivation endpoints are public and don't require authentication.
+</Note>
+
+API key authentication can be used on endpoints that support `apiKeyMiddleware`. Check individual endpoint documentation for authentication requirements.
+
+### Example: Building a Transaction with API Key
+
+```bash
+curl -X POST https://api.orquestra.so/api/my-project/instructions/transfer/build \
+  -H "X-API-Key: b58_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "accounts": {
+      "from": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+      "to": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+      "systemProgram": "11111111111111111111111111111111"
+    },
+    "args": { "amount": 1000000 },
+    "feePayer": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+  }'
+```
+
+## Key Format
+
+API keys are generated using cryptographically secure random bytes:
+
+```typescript
+const keyBytes = new Uint8Array(32);
+crypto.getRandomValues(keyBytes);
+const apiKey = `b58_${Array.from(keyBytes).map(b => b.toString(16).padStart(2, '0')).join('')}`;
+```
+
+- **Prefix**: `b58_` (for identification)
+- **Length**: 68 characters total (4 prefix + 64 hex)
+- **Entropy**: 32 bytes (256 bits) of randomness
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Store API keys securely">
+    - Use environment variables or secret management services
+    - Never commit API keys to version control
+    - Use `.env` files and add them to `.gitignore`
+    - Rotate keys if accidentally exposed
+  </Accordion>
+  
+  <Accordion title="Use expiration for temporary access">
+    - Set `expiresInDays` when creating keys for temporary use
+    - Short-lived keys reduce risk if compromised
+    - Review and delete expired keys regularly
+  </Accordion>
+  
+  <Accordion title="Limit key scope">
+    - Create separate keys for different services
+    - One key per project for easier tracking
+    - Delete keys when no longer needed
+  </Accordion>
+  
+  <Accordion title="Monitor key usage">
+    - Check `last_used` timestamps to detect unused keys
+    - Track which services are using which keys
+    - Investigate unexpected usage patterns
+  </Accordion>
+  
+  <Accordion title="Rotate keys regularly">
+    - Rotate keys every 90 days as a best practice
+    - Rotate immediately if you suspect compromise
+    - Update all services using the old key
+  </Accordion>
+</AccordionGroup>
+
+## Error Responses
+
+<ResponseField name="401 Unauthorized">
+  **Missing API Key**
+  ```json
+  {
+    "error": "Unauthorized",
+    "message": "Missing X-API-Key header"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  **Invalid or Expired API Key**
+  ```json
+  {
+    "error": "Unauthorized",
+    "message": "Invalid or expired API key"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="403 Forbidden">
+  **Insufficient Permissions**
+  ```json
+  {
+    "error": "Forbidden",
+    "message": "This API key does not have access to this resource"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="404 Not Found">
+  **Project or Key Not Found**
+  ```json
+  {
+    "error": "Project not found or access denied"
+  }
+  ```
+</ResponseField>
+
+## Comparison: API Keys vs JWT
+
+| Feature | API Key | JWT |
+|---------|---------|-----|
+| **Scope** | Project-specific | User-wide |
+| **Lifetime** | Permanent or custom | 7 days |
+| **Revocation** | Immediate (delete anytime) | Cannot revoke |
+| **Use Case** | Programmatic access | User authentication |
+| **Header** | `X-API-Key: <key>` | `Authorization: Bearer <token>` |
+| **Creation** | Owner via API | OAuth flow |
+| **Best For** | CI/CD, bots, backend services | Web apps, mobile apps |
+| **Tracking** | Last used timestamp | No tracking |
+
+## Implementation Reference
+
+API key authentication is implemented in `/packages/worker/src/middleware/auth.ts`:
+
+```typescript
+export async function apiKeyMiddleware(c: Context, next: Next) {
+  const apiKey = c.req.header('X-API-Key');
+  
+  if (!apiKey) {
+    return c.json({ error: 'Unauthorized', message: 'Missing X-API-Key header' }, 401);
+  }
+  
+  const result = await db.prepare(
+    `SELECT ak.*, p.user_id, p.name as project_name 
+     FROM api_keys ak 
+     JOIN projects p ON ak.project_id = p.id 
+     WHERE ak.key = ? AND (ak.expires_at IS NULL OR ak.expires_at > datetime('now'))`
+  ).bind(apiKey).first();
+  
+  if (!result) {
+    return c.json({ error: 'Unauthorized', message: 'Invalid or expired API key' }, 401);
+  }
+  
+  // Update last_used timestamp
+  await db.prepare('UPDATE api_keys SET last_used = datetime(\'now\') WHERE key = ?')
+    .bind(apiKey)
+    .run();
+  
+  c.set('apiKeyProjectId', result.project_id);
+  c.set('apiKeyUserId', result.user_id);
+  
+  await next();
+}
+```
+
+## Related Endpoints
+
+- [JWT Authentication](/api/auth/jwt) - User authentication
+- [GitHub OAuth](/api/auth/github-oauth) - Obtain a JWT token
+- [Build Transaction](/api/transactions/build) - Use API keys for transaction building

@@ -1,0 +1,432 @@
+---
+title: 'Project Types'
+api: 'GET /api/:projectId/types'
+description: 'List all custom type definitions from a program IDL'
+---
+
+## Overview
+
+Custom types (also called "defined types") are reusable data structures defined in Anchor programs. They can be used as instruction arguments, account fields, or nested within other types. This endpoint returns all type definitions from the program's IDL.
+
+## Get Program Types
+
+<CodeGroup>
+```bash Endpoint
+GET /api/:projectId/types
+```
+</CodeGroup>
+
+Retrieve all custom type definitions from the program's IDL with full field resolution.
+
+### Path Parameters
+
+<ParamField path="projectId" type="string" required>
+  The unique identifier of the project
+</ParamField>
+
+### Response
+
+<ResponseField name="projectId" type="string">
+  The project identifier
+</ResponseField>
+
+<ResponseField name="programName" type="string">
+  Name of the Anchor program from the IDL
+</ResponseField>
+
+<ResponseField name="types" type="array">
+  List of type definitions
+  
+  <Expandable title="Type Object">
+    <ResponseField name="name" type="string">
+      Type name in PascalCase
+    </ResponseField>
+    
+    <ResponseField name="kind" type="string">
+      Type kind: "struct" or "enum"
+    </ResponseField>
+    
+    <ResponseField name="fields" type="array">
+      Fields for struct types, or variants for enum types
+      
+      <Expandable title="Field">
+        <ResponseField name="name" type="string">
+          Field or variant name
+        </ResponseField>
+        
+        <ResponseField name="type" type="string">
+          Resolved type representation (e.g., "u64", "publicKey", "vec\<string\>")
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.orquestra.so/api/proj_abc123/types"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.orquestra.so/api/proj_abc123/types');
+const data = await response.json();
+console.log(data.types);
+```
+
+```python Python
+import requests
+
+response = requests.get('https://api.orquestra.so/api/proj_abc123/types')
+data = response.json()
+
+for type_def in data['types']:
+    print(f"{type_def['name']} ({type_def['kind']}):")
+    for field in type_def['fields']:
+        print(f"  - {field['name']}: {field['type']}")
+```
+</CodeGroup>
+
+## Example Response
+
+```json
+{
+  "projectId": "proj_abc123",
+  "programName": "token_swap",
+  "types": [
+    {
+      "name": "PoolConfig",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "minLiquidity",
+          "type": "u64"
+        },
+        {
+          "name": "maxSlippage",
+          "type": "u16"
+        },
+        {
+          "name": "enableOracle",
+          "type": "bool"
+        },
+        {
+          "name": "oracleAddress",
+          "type": "option<publicKey>"
+        }
+      ]
+    },
+    {
+      "name": "SwapDirection",
+      "kind": "enum",
+      "fields": [
+        {
+          "name": "AToB",
+          "type": "unit"
+        },
+        {
+          "name": "BToA",
+          "type": "unit"
+        }
+      ]
+    },
+    {
+      "name": "PriceOracle",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "address",
+          "type": "publicKey"
+        },
+        {
+          "name": "lastPrice",
+          "type": "u64"
+        },
+        {
+          "name": "lastUpdated",
+          "type": "i64"
+        },
+        {
+          "name": "confidence",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "LiquidityOperation",
+      "kind": "enum",
+      "fields": [
+        {
+          "name": "Deposit",
+          "type": "{ amountA: u64, amountB: u64 }"
+        },
+        {
+          "name": "Withdraw",
+          "type": "{ liquidity: u64 }"
+        }
+      ]
+    },
+    {
+      "name": "FeeStructure",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "tradeFee",
+          "type": "u16"
+        },
+        {
+          "name": "protocolFee",
+          "type": "u16"
+        },
+        {
+          "name": "lpFee",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "TradeHistory",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "user",
+          "type": "publicKey"
+        },
+        {
+          "name": "timestamp",
+          "type": "i64"
+        },
+        {
+          "name": "direction",
+          "type": "SwapDirection"
+        },
+        {
+          "name": "amountIn",
+          "type": "u64"
+        },
+        {
+          "name": "amountOut",
+          "type": "u64"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Understanding Type Definitions
+
+### Struct Types
+
+Structs are composite types with named fields. They're similar to objects in JavaScript or structs in Rust.
+
+<CodeGroup>
+```rust Rust Definition
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct PoolConfig {
+    pub min_liquidity: u64,
+    pub max_slippage: u16,
+    pub enable_oracle: bool,
+    pub oracle_address: Option<Pubkey>,
+}
+```
+
+```javascript JavaScript Usage
+const poolConfig = {
+  minLiquidity: 1000000n,  // u64 as BigInt
+  maxSlippage: 100,        // u16 as number (100 = 1%)
+  enableOracle: true,
+  oracleAddress: new PublicKey('...')
+};
+
+await program.methods.initialize(poolConfig)
+  .accounts({ /* ... */ })
+  .rpc();
+```
+</CodeGroup>
+
+### Enum Types
+
+Enums represent a choice between multiple variants. Variants can be unit types (no data) or contain associated data.
+
+<CodeGroup>
+```rust Rust Definition
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub enum SwapDirection {
+    AToB,
+    BToA,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub enum LiquidityOperation {
+    Deposit { amount_a: u64, amount_b: u64 },
+    Withdraw { liquidity: u64 },
+}
+```
+
+```javascript JavaScript Usage
+// Simple enum (unit variants)
+const direction = { aToB: {} };  // or { bToA: {} }
+
+await program.methods.swap(amount, minOut, direction)
+  .accounts({ /* ... */ })
+  .rpc();
+
+// Enum with data
+const operation = {
+  deposit: {
+    amountA: 1000000n,
+    amountB: 2000000n
+  }
+};
+// or
+const operation = {
+  withdraw: {
+    liquidity: 500000n
+  }
+};
+
+await program.methods.manageLiquidity(operation)
+  .accounts({ /* ... */ })
+  .rpc();
+```
+</CodeGroup>
+
+## Type Resolution
+
+Orquestra automatically resolves complex and nested types into readable string representations:
+
+<ResponseField name="Type Resolution Examples" type="table">
+  | IDL Type | Resolved String |
+  |----------|----------------|
+  | `{ "defined": "PoolConfig" }` | `PoolConfig` |
+  | `{ "option": "publicKey" }` | `option<publicKey>` |
+  | `{ "vec": "u8" }` | `vec<u8>` |
+  | `{ "array": ["u8", 32] }` | `[u8; 32]` |
+  | `"publicKey"` | `publicKey` |
+  | `"u64"` | `u64` |
+  | `"string"` | `string` |
+</ResponseField>
+
+## Using Types in Instructions
+
+Custom types can be used as instruction arguments:
+
+<CodeGroup>
+```javascript Passing Struct Arguments
+const config = {
+  minLiquidity: 1000000n,
+  maxSlippage: 100,
+  enableOracle: false,
+  oracleAddress: null
+};
+
+const feeStructure = {
+  tradeFee: 30,      // 0.3%
+  protocolFee: 5,    // 0.05%
+  lpFee: 25          // 0.25%
+};
+
+await program.methods
+  .initializePool(config, feeStructure)
+  .accounts({
+    pool: poolPda,
+    authority: wallet.publicKey,
+    // ...
+  })
+  .rpc();
+```
+
+```javascript Passing Enum Arguments
+// Simple enum
+const direction = { aToB: {} };
+
+await program.methods.swap(amount, minOut, direction)
+  .accounts({ /* ... */ })
+  .rpc();
+
+// Enum with associated data
+const operation = {
+  deposit: {
+    amountA: 1000000n,
+    amountB: 2000000n
+  }
+};
+
+await program.methods.manageLiquidity(operation)
+  .accounts({ /* ... */ })
+  .rpc();
+```
+</CodeGroup>
+
+## Nested and Recursive Types
+
+Types can reference other custom types, creating nested structures:
+
+```json Nested Type Example
+{
+  "name": "PoolState",
+  "kind": "struct",
+  "fields": [
+    {
+      "name": "config",
+      "type": "PoolConfig"
+    },
+    {
+      "name": "fees",
+      "type": "FeeStructure"
+    },
+    {
+      "name": "oracle",
+      "type": "option<PriceOracle>"
+    },
+    {
+      "name": "recentTrades",
+      "type": "vec<TradeHistory>"
+    }
+  ]
+}
+```
+
+## Error Responses
+
+<AccordionGroup>
+  <Accordion title="404 Not Found">
+    ```json
+    {
+      "error": "Project not found or not public"
+    }
+    ```
+    
+    The specified project ID does not exist, is private, or has no IDL uploaded.
+  </Accordion>
+  
+  <Accordion title="500 Internal Server Error">
+    ```json
+    {
+      "error": "Failed to get types"
+    }
+    ```
+    
+    The server encountered an error processing the request.
+  </Accordion>
+</AccordionGroup>
+
+## Notes
+
+<Info>
+  **No authentication required** - This endpoint is public for all public projects.
+</Info>
+
+<Tip>
+  Use this endpoint to generate TypeScript type definitions for your frontend client. The type information can be used to create strongly-typed interfaces.
+</Tip>
+
+<Note>
+  Types are resolved recursively. If a type references another custom type (e.g., `PoolConfig` contains a `FeeStructure`), you'll see the type name, and you can look up the referenced type in the same response.
+</Note>
+
+<Warning>
+  Some programs may have no custom types defined (empty array). These programs use only primitive types (u64, bool, publicKey, etc.) in their instructions and accounts.
+</Warning>

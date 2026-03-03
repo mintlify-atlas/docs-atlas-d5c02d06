@@ -1,0 +1,562 @@
+---
+title: 'Testing Guide'
+description: 'Learn how to run tests, type checking, linting, and understand CI/CD checks'
+---
+
+Testing is a critical part of the Orquestra development workflow. This guide covers running tests locally and understanding the automated CI/CD checks.
+
+## Test Stack
+
+Orquestra uses:
+
+- **Bun Test** - Fast, built-in test runner
+- **TypeScript** - Type checking for compile-time safety
+- **ESLint** - Linting for code quality
+- **GitHub Actions** - Automated CI/CD pipeline
+
+## Running Tests Locally
+
+### Unit Tests
+
+Run the test suite:
+
+```bash
+# Run all tests
+bun test
+
+# Run tests in worker package
+bun test --cwd packages/worker
+
+# Run tests in watch mode
+bun test --watch
+
+# Run specific test file
+bun test packages/worker/src/services/auth.test.ts
+```
+
+### Test Output
+
+```bash
+$ bun test
+bun test v1.0.0
+
+✓ packages/worker/src/services/auth.test.ts
+  ✓ validateApiKey
+    ✓ returns true for valid API keys
+    ✓ returns false for invalid API keys
+    ✓ handles null and undefined
+  ✓ generateApiKey
+    ✓ generates 32 character keys
+    ✓ generates unique keys
+
+5 tests passed (234ms)
+```
+
+## Type Checking
+
+Run TypeScript compiler to check types across all packages:
+
+```bash
+# Check all packages
+bun run type-check
+
+# Output shows any type errors
+$ bun run type-check
+packages/shared/tsconfig.json: ✓
+packages/worker/tsconfig.json: ✓
+packages/frontend/tsconfig.json: ✓
+packages/cli/tsconfig.json: ✓
+
+All type checks passed!
+```
+
+### Type Check Individual Packages
+
+```bash
+# Check worker types
+tsc --noEmit -p packages/worker/tsconfig.json
+
+# Check frontend types
+tsc --noEmit -p packages/frontend/tsconfig.json
+
+# Check shared types
+tsc --noEmit -p packages/shared/tsconfig.json
+```
+
+### Common Type Errors
+
+**Missing return type:**
+
+```typescript
+// Error: Missing return type on function
+export async function createProject(data) {
+  return await db.insert(data);
+}
+
+// Fix: Add explicit return type
+export async function createProject(data: ProjectInput): Promise<Project> {
+  return await db.insert(data);
+}
+```
+
+**Implicit any:**
+
+```typescript
+// Error: Parameter 'req' implicitly has an 'any' type
+app.post('/api/projects', (req, res) => {
+  // ...
+});
+
+// Fix: Add types
+import type { Request, Response } from 'hono';
+
+app.post('/api/projects', (req: Request, res: Response) => {
+  // ...
+});
+```
+
+**Null safety:**
+
+```typescript
+// Error: Object is possibly 'null'
+const project = await getProject(id);
+console.log(project.name);
+
+// Fix: Handle null case
+const project = await getProject(id);
+if (project) {
+  console.log(project.name);
+} else {
+  throw new Error('Project not found');
+}
+```
+
+## Linting
+
+Run ESLint to check code quality:
+
+```bash
+# Check all packages
+bun run lint
+
+# Auto-fix issues
+bun run lint:fix
+
+# Lint specific package
+bun run lint --prefix packages/frontend
+```
+
+### Common Lint Issues
+
+**Unused variables:**
+
+```typescript
+// Warning: 'request' is defined but never used
+function handler(request: Request, response: Response) {
+  return response.json({ status: 'ok' });
+}
+
+// Fix: Prefix with underscore
+function handler(_request: Request, response: Response) {
+  return response.json({ status: 'ok' });
+}
+```
+
+**Missing return types:**
+
+```typescript
+// Warning: Missing return type on exported function
+export function calculateTotal(items) {
+  return items.reduce((sum, item) => sum + item.price, 0);
+}
+
+// Fix: Add explicit return type
+export function calculateTotal(items: CartItem[]): number {
+  return items.reduce((sum, item) => sum + item.price, 0);
+}
+```
+
+## Code Formatting
+
+Format code with Prettier:
+
+```bash
+# Format all code
+bun run format
+
+# Check formatting without modifying files
+bun run prettier --check "packages/**/src/**/*.(ts|tsx|json|css)"
+```
+
+## Writing Tests
+
+### Test Structure
+
+Organize tests with `describe` and `it` blocks:
+
+```typescript
+import { describe, it, expect } from 'bun:test';
+import { isValidSolanaAddress } from './validators';
+
+describe('isValidSolanaAddress', () => {
+  it('returns true for valid addresses', () => {
+    const valid = '11111111111111111111111111111111';
+    expect(isValidSolanaAddress(valid)).toBe(true);
+  });
+
+  it('returns false for invalid addresses', () => {
+    expect(isValidSolanaAddress('invalid')).toBe(false);
+    expect(isValidSolanaAddress('')).toBe(false);
+    expect(isValidSolanaAddress('too-short')).toBe(false);
+  });
+
+  it('handles null and undefined', () => {
+    expect(isValidSolanaAddress(null as any)).toBe(false);
+    expect(isValidSolanaAddress(undefined as any)).toBe(false);
+  });
+});
+```
+
+### Unit Tests
+
+Test individual functions in isolation:
+
+```typescript
+import { describe, it, expect } from 'bun:test';
+import { generateApiKey, hashApiKey } from './auth';
+
+describe('API Key utilities', () => {
+  describe('generateApiKey', () => {
+    it('generates 32 character keys', () => {
+      const key = generateApiKey();
+      expect(key.length).toBe(32);
+    });
+
+    it('generates unique keys', () => {
+      const key1 = generateApiKey();
+      const key2 = generateApiKey();
+      expect(key1).not.toBe(key2);
+    });
+
+    it('generates alphanumeric keys', () => {
+      const key = generateApiKey();
+      expect(key).toMatch(/^[a-zA-Z0-9]+$/);
+    });
+  });
+
+  describe('hashApiKey', () => {
+    it('produces consistent hashes', () => {
+      const key = 'test-key-123';
+      const hash1 = hashApiKey(key);
+      const hash2 = hashApiKey(key);
+      expect(hash1).toBe(hash2);
+    });
+
+    it('produces different hashes for different keys', () => {
+      const hash1 = hashApiKey('key1');
+      const hash2 = hashApiKey('key2');
+      expect(hash1).not.toBe(hash2);
+    });
+  });
+});
+```
+
+### Integration Tests
+
+Test component interactions:
+
+```typescript
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { Hono } from 'hono';
+import { projectRouter } from './routes/projects';
+
+describe('Project API', () => {
+  let app: Hono;
+
+  beforeEach(() => {
+    app = new Hono();
+    app.route('/api/projects', projectRouter);
+  });
+
+  it('creates a new project', async () => {
+    const response = await app.request('/api/projects', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-api-key',
+      },
+      body: JSON.stringify({
+        name: 'Test Project',
+        idl: { /* IDL data */ },
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const data = await response.json();
+    expect(data.id).toBeDefined();
+    expect(data.name).toBe('Test Project');
+  });
+
+  it('returns 401 without API key', async () => {
+    const response = await app.request('/api/projects', {
+      method: 'POST',
+    });
+
+    expect(response.status).toBe(401);
+  });
+});
+```
+
+### Test Best Practices
+
+**Arrange-Act-Assert pattern:**
+
+```typescript
+it('calculates order total correctly', () => {
+  // Arrange: Set up test data
+  const items = [
+    { name: 'Item 1', price: 10 },
+    { name: 'Item 2', price: 20 },
+  ];
+
+  // Act: Execute the function
+  const total = calculateTotal(items);
+
+  // Assert: Verify the result
+  expect(total).toBe(30);
+});
+```
+
+**Test edge cases:**
+
+```typescript
+describe('parseIdl', () => {
+  it('parses valid IDL', () => {
+    const idl = { /* valid IDL */ };
+    expect(parseIdl(idl)).toBeDefined();
+  });
+
+  it('throws on invalid IDL', () => {
+    expect(() => parseIdl(null)).toThrow();
+    expect(() => parseIdl({})).toThrow();
+    expect(() => parseIdl({ version: 'invalid' })).toThrow();
+  });
+
+  it('handles missing optional fields', () => {
+    const minimalIdl = { version: '0.1.0', name: 'test' };
+    expect(parseIdl(minimalIdl)).toBeDefined();
+  });
+});
+```
+
+**Use descriptive test names:**
+
+```typescript
+// Good: Clear what is being tested and expected outcome
+it('returns empty array when user has no projects', () => {
+  // ...
+});
+
+// Bad: Unclear what is being tested
+it('works', () => {
+  // ...
+});
+```
+
+## CI/CD Pipeline
+
+Orquestra uses GitHub Actions for automated testing and deployment.
+
+### CI Checks
+
+Every pull request runs these checks:
+
+#### 1. Lint & Type Check
+
+```yaml
+jobs:
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Bun
+      - name: Install dependencies
+        run: bun install
+      - name: Type check
+        run: bun run type-check
+```
+
+#### 2. Test
+
+```yaml
+test:
+  name: Test
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - name: Install Bun
+    - name: Install dependencies
+      run: bun install
+    - name: Run tests
+      run: bun test
+      working-directory: packages/worker
+```
+
+#### 3. Build
+
+```yaml
+build:
+  name: Build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - name: Install Bun
+    - name: Install dependencies
+      run: bun install
+    - name: Build all packages
+      run: bun run build
+```
+
+### Workflow Triggers
+
+CI runs on:
+
+- **Push to main/develop:** Full CI + deployment
+- **Pull requests:** Full CI (no deployment)
+- **Manual trigger:** Via GitHub Actions UI
+
+### Database Migrations
+
+Separate workflow for database changes:
+
+```yaml
+name: Database Migrations
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'migrations/**'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [ development, production ]
+```
+
+Migrations run automatically when files in `migrations/` change.
+
+## Local Development Workflow
+
+Recommended workflow before committing:
+
+```bash
+# 1. Make your changes
+vim packages/worker/src/routes/projects.ts
+
+# 2. Run type check
+bun run type-check
+
+# 3. Run linting
+bun run lint:fix
+
+# 4. Run tests
+bun test
+
+# 5. Format code
+bun run format
+
+# 6. Commit changes
+git add .
+git commit -m "feat: add project archiving functionality"
+
+# 7. Push and create PR
+git push origin feature/project-archiving
+```
+
+## Debugging Failed Tests
+
+### View Detailed Output
+
+```bash
+# Run with verbose output
+bun test --verbose
+
+# Run specific failing test
+bun test packages/worker/src/services/auth.test.ts
+```
+
+### Add Debug Logging
+
+```typescript
+it('processes complex data', () => {
+  const input = { /* ... */ };
+  
+  console.log('Input:', input);
+  const result = processData(input);
+  console.log('Result:', result);
+  
+  expect(result).toBeDefined();
+});
+```
+
+### Check CI Logs
+
+If tests pass locally but fail in CI:
+
+1. Go to your PR on GitHub
+2. Click "Details" next to failed check
+3. Review the full log output
+4. Look for environment-specific issues (paths, dependencies, etc.)
+
+## Test Coverage
+
+While Orquestra doesn't enforce strict coverage percentages, aim to:
+
+- Test all public APIs
+- Test error cases and edge cases
+- Test integration between components
+- Test critical business logic thoroughly
+
+**Focus on:**
+
+- Authentication and authorization
+- Data validation
+- API endpoints
+- Database operations
+- IDL parsing and transformation
+
+## Performance Testing
+
+For performance-critical code:
+
+```typescript
+import { describe, it } from 'bun:test';
+
+describe('Performance', () => {
+  it('processes large IDL in under 100ms', () => {
+    const largeIdl = generateLargeIdl(1000);
+    
+    const start = performance.now();
+    processIdl(largeIdl);
+    const duration = performance.now() - start;
+    
+    expect(duration).toBeLessThan(100);
+  });
+});
+```
+
+## Continuous Improvement
+
+- Add tests when fixing bugs
+- Improve tests when refactoring
+- Keep tests simple and focused
+- Update tests when requirements change
+- Remove obsolete tests
+
+---
+
+Consistent testing ensures Orquestra remains stable, reliable, and maintainable as it grows.

@@ -1,0 +1,279 @@
+---
+title: Scanning Programs
+description: Discover all executable programs on a Solana cluster
+---
+
+The `scan` command discovers all executable programs on a Solana cluster by querying BPF Loader program accounts.
+
+## Overview
+
+Programs are discovered by querying `getProgramAccounts` on different BPF Loader programs:
+
+- **BPFLoaderUpgradeable** - Modern upgradeable programs (always included)
+- **BPF Loader v2** - Legacy non-upgradeable programs (included by default)
+- **BPF Loader v1** - Deprecated loader (optional, requires flag)
+
+## Basic Usage
+
+```bash
+bun run cli:scan -- --rpc-url <url> [options]
+```
+
+### Required Options
+
+| Option | Description |
+|--------|-------------|
+| `--rpc-url <url>` | Solana RPC endpoint URL (or set `SOLANA_RPC_URL` env) |
+
+### Optional Flags
+
+| Option | Description | Default |
+|--------|-------------|--------|
+| `--out-dir <dir>` | Output directory for CSV files | `./output` |
+| `--max-programs <n>` | Limit number of programs (0 = unlimited) | `0` |
+| `--include-legacy-v1` | Include BPF Loader v1 programs | `false` |
+| `--no-legacy-v2` | Exclude BPF Loader v2 programs | includes v2 |
+| `--rps <n>` | Max requests per second (rate limit) | `10` |
+| `--resume` | Resume from checkpoint if available | `false` |
+
+## Examples
+
+<CodeGroup>
+```bash Basic Scan
+bun run cli:scan -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --out-dir ./mainnet-scan
+```
+
+```bash Limited Scan
+bun run cli:scan -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --max-programs 1000
+```
+
+```bash Devnet Scan
+bun run cli:scan -- \
+  --rpc-url 'https://api.devnet.solana.com' \
+  --out-dir ./devnet-scan
+```
+
+```bash Premium RPC
+bun run cli:scan -- \
+  --rpc-url 'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY' \
+  --rps 20
+```
+
+```bash Include Legacy v1
+bun run cli:scan -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --include-legacy-v1
+```
+</CodeGroup>
+
+## RPC Configuration
+
+### Using Environment Variables
+
+Set the RPC URL as an environment variable:
+
+```bash
+export SOLANA_RPC_URL='https://api.mainnet-beta.solana.com'
+bun run cli:scan -- --out-dir ./output
+```
+
+### Rate Limiting
+
+Adjust the rate limit based on your RPC provider:
+
+<CodeGroup>
+```bash Public RPC
+# Conservative rate limiting for public endpoints
+bun run cli:scan -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --rps 2
+```
+
+```bash Premium RPC
+# Higher rate limit for paid providers
+bun run cli:scan -- \
+  --rpc-url 'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY' \
+  --rps 20
+```
+</CodeGroup>
+
+<Warning>
+Public RPCs have strict rate limits. The tool will automatically retry on 429 errors, but setting a lower `--rps` value prevents excessive retries.
+</Warning>
+
+## Output Format
+
+The scan produces a CSV file named `programs.csv` in the specified output directory.
+
+### programs.csv Structure
+
+```csv
+program_id,loader
+MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD,upgradeable
+JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,upgradeable
+whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc,upgradeable
+```
+
+| Column | Description |
+|--------|-------------|
+| `program_id` | Base58-encoded program public key |
+| `loader` | Loader type: `upgradeable`, `legacy-v2`, or `legacy-v1` |
+
+### Additional Files Created
+
+The scan also creates intermediate files:
+
+| File | Description | Purpose |
+|------|-------------|--------|
+| `.program-list.json` | JSON array of program IDs | Used by `check-idl` command |
+| `.checkpoint-scan.json` | Resume checkpoint data | Enables `--resume` functionality |
+
+## Checkpointing and Resume
+
+If a scan is interrupted, you can resume from the last checkpoint:
+
+```bash
+# First run (interrupted)
+bun run cli:scan -- --rpc-url 'https://...' --out-dir ./output
+# ... interrupted at 4523/50000 ...
+
+# Resume from checkpoint
+bun run cli:scan -- --rpc-url 'https://...' --out-dir ./output --resume
+# ✓ Resuming: 4523 already processed, 45477 remaining
+```
+
+### How Checkpointing Works
+
+1. Progress is saved to `.checkpoint-scan.json` periodically
+2. On resume, the tool skips already-processed programs
+3. The CSV is appended with new results
+4. The checkpoint file is deleted on successful completion
+
+<Note>
+Checkpoints are specific to the output directory. Use the same `--out-dir` when resuming.
+</Note>
+
+## Program Discovery Process
+
+### Loader Types
+
+The scan queries different BPF Loader programs to find all executable programs:
+
+#### 1. BPFLoaderUpgradeable (Always Included)
+
+- Program ID: `BPFLoaderUpgradeab1e11111111111111111111111`
+- Modern upgradeable programs (Anchor ≥0.24)
+- Marked as `loader: upgradeable` in CSV
+
+#### 2. BPF Loader v2 (Default: Included)
+
+- Legacy non-upgradeable programs
+- Exclude with `--no-legacy-v2`
+- Marked as `loader: legacy-v2` in CSV
+
+#### 3. BPF Loader v1 (Optional)
+
+- Deprecated loader, rarely used
+- Include with `--include-legacy-v1`
+- Marked as `loader: legacy-v1` in CSV
+
+### Discovery Method
+
+For each loader, the scan:
+
+1. Calls `getProgramAccounts` with filters for executable accounts
+2. Extracts program public keys from results
+3. Limits results if `--max-programs` is set
+4. Writes results to CSV incrementally
+
+## Performance Considerations
+
+### Full Cluster Scans
+
+Scanning all programs on mainnet discovers 50,000+ programs:
+
+- **Time**: 30 minutes to 2+ hours depending on RPC
+- **Requests**: Thousands of RPC calls
+- **Recommendation**: Use premium RPC with high rate limit
+
+```bash
+# Full cluster scan with premium RPC
+bun run cli:scan -- \
+  --rpc-url 'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY' \
+  --out-dir ./full-scan \
+  --rps 20
+```
+
+### Testing and Development
+
+Limit the scan for testing:
+
+```bash
+# Test with 100 programs
+bun run cli:scan -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --max-programs 100 \
+  --out-dir ./test-scan
+```
+
+### Network Considerations
+
+<Tabs>
+  <Tab title="Mainnet">
+    - 50,000+ programs
+    - Requires stable connection
+    - Use `--resume` for reliability
+    - Consider premium RPC
+  </Tab>
+  <Tab title="Devnet">
+    - Fewer programs (~5,000)
+    - Good for testing
+    - Public RPC usually sufficient
+  </Tab>
+  <Tab title="Testnet/Localnet">
+    - Minimal programs
+    - Fast scans
+    - No rate limiting needed
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+### "429 Too Many Requests"
+
+**Problem**: RPC is rate-limiting your requests.
+
+**Solutions**:
+- Lower `--rps` value: `--rps 2` or `--rps 1`
+- Use a premium RPC provider with higher limits
+- Use `--resume` to continue after waiting
+
+### Slow Performance
+
+**Problem**: Scanning takes too long on public RPC.
+
+**Solutions**:
+- Use `--max-programs` to limit scope: `--max-programs 1000`
+- Use premium RPC with higher `--rps`
+- Run overnight for full cluster scans
+- Use `--resume` if interrupted
+
+### Out of Memory
+
+**Problem**: Node/Bun runs out of memory on very large scans.
+
+**Solution**: The tool streams results to CSV, so this is rare. If it happens:
+- Lower `--max-programs` and merge CSVs manually
+- Ensure you have sufficient system memory
+
+## Next Steps
+
+After scanning programs, check which ones have on-chain IDL:
+
+<Card title="Checking IDL" icon="file-check" href="/cli/checking-idl">
+  Learn how to verify which programs have Anchor IDL
+</Card>

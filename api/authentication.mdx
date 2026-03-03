@@ -1,0 +1,461 @@
+---
+title: 'Authentication'
+description: 'Authenticate API requests using JWT tokens or API keys'
+---
+
+## Authentication Methods
+
+Orquestra API supports two authentication methods:
+
+1. **JWT Tokens** - For user sessions (web applications)
+2. **API Keys** - For programmatic access (scripts, integrations)
+
+## JWT Token Authentication
+
+JWT (JSON Web Token) authentication is used for user sessions after GitHub OAuth login.
+
+### How It Works
+
+1. User authenticates via GitHub OAuth
+2. API generates a JWT token valid for 7 days
+3. Client includes token in `Authorization` header
+4. API validates token signature and expiration
+
+### Token Structure
+
+JWT tokens contain:
+
+<ResponseField name="sub" type="string">
+  User ID (subject)
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  GitHub username
+</ResponseField>
+
+<ResponseField name="iat" type="integer">
+  Issued at timestamp (Unix seconds)
+</ResponseField>
+
+<ResponseField name="exp" type="integer">
+  Expiration timestamp (Unix seconds)
+</ResponseField>
+
+### Authorization Header Format
+
+```http
+Authorization: Bearer YOUR_JWT_TOKEN
+```
+
+### Example Request
+
+```bash
+curl https://api.orquestra.dev/api/projects/mine \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+### GitHub OAuth Flow
+
+<Steps>
+  <Step title="Initiate Login">
+    Redirect user to GitHub OAuth:
+    
+    ```bash
+    GET /auth/github
+    ```
+    
+    This redirects to GitHub with:
+    - `client_id` - Your GitHub OAuth application ID
+    - `redirect_uri` - Callback URL (`/auth/github/callback`)
+    - `scope` - `user:email read:user`
+  </Step>
+  
+  <Step title="GitHub Authorization">
+    User authorizes the application on GitHub. GitHub redirects back with an authorization code.
+  </Step>
+  
+  <Step title="Exchange Code for Token">
+    For web applications (browser redirect):
+    
+    ```
+    GET /auth/github/callback?code=GITHUB_CODE
+    ```
+    
+    Redirects to frontend with JWT token:
+    ```
+    https://orquestra.dev/auth/callback?token=JWT_TOKEN
+    ```
+    
+    For API clients (JSON response):
+    
+    ```bash
+    curl -X POST https://api.orquestra.dev/auth/github/callback \
+      -H "Content-Type: application/json" \
+      -d '{"code": "GITHUB_CODE"}'
+    ```
+    
+    Response:
+    ```json
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "user": {
+        "id": "abc123",
+        "username": "alice",
+        "email": "alice@example.com",
+        "avatar_url": "https://avatars.githubusercontent.com/u/123456"
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Use Token">
+    Store token securely (localStorage, cookies, environment variable) and include in requests:
+    
+    ```bash
+    curl https://api.orquestra.dev/api/projects/mine \
+      -H "Authorization: Bearer YOUR_JWT_TOKEN"
+    ```
+  </Step>
+</Steps>
+
+### Get Current User Profile
+
+Retrieve authenticated user information:
+
+```bash
+curl https://api.orquestra.dev/auth/me \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+Response:
+
+```json
+{
+  "user": {
+    "id": "abc123",
+    "username": "alice",
+    "email": "alice@example.com",
+    "avatar_url": "https://avatars.githubusercontent.com/u/123456",
+    "created_at": "2024-01-15T10:30:00.000Z",
+    "projectCount": 5
+  }
+}
+```
+
+### Token Expiration
+
+JWT tokens expire after 7 days. When a token expires:
+
+```json
+{
+  "error": "Unauthorized",
+  "message": "Invalid or expired token"
+}
+```
+
+Response status: `401 Unauthorized`
+
+Users must re-authenticate via GitHub OAuth to get a new token.
+
+### Error Responses
+
+<ResponseField name="401 - Missing Authorization">
+  ```json
+  {
+    "error": "Unauthorized",
+    "message": "Missing or invalid Authorization header"
+  }
+  ```
+  
+  The `Authorization` header is missing or doesn't start with `Bearer`.
+</ResponseField>
+
+<ResponseField name="401 - Invalid Token">
+  ```json
+  {
+    "error": "Unauthorized",
+    "message": "Invalid or expired token"
+  }
+  ```
+  
+  Token signature is invalid, token is malformed, or token has expired.
+</ResponseField>
+
+## API Key Authentication
+
+API keys provide programmatic access to your projects without requiring user authentication. They're ideal for:
+
+- CI/CD pipelines
+- Backend services
+- Automation scripts
+- Third-party integrations
+
+### How It Works
+
+1. Owner creates API key for a specific project
+2. Key is shown once and must be stored securely
+3. Key is included in `X-API-Key` header
+4. API validates key and associates requests with the project
+
+### API Key Format
+
+API keys are 64-character hex strings prefixed with `b58_`:
+
+```
+b58_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2
+```
+
+### Creating an API Key
+
+<Note>
+  You must be the project owner and authenticated with a JWT token to create API keys.
+</Note>
+
+```bash
+curl -X POST https://api.orquestra.dev/api/projects/PROJECT_ID/keys \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "expiresInDays": 90
+  }'
+```
+
+<ParamField body="expiresInDays" type="integer" optional>
+  Number of days until key expires. Omit for no expiration.
+</ParamField>
+
+Response:
+
+```json
+{
+  "id": "key123",
+  "key": "b58_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2",
+  "createdAt": "2024-03-15T10:30:00.000Z",
+  "expiresAt": "2024-06-15T10:30:00.000Z",
+  "message": "Store this key securely. It will not be shown again."
+}
+```
+
+<Warning>
+  The full API key is only returned once during creation. Store it securely - you cannot retrieve it again.
+</Warning>
+
+### Using an API Key
+
+Include the API key in the `X-API-Key` header:
+
+```bash
+curl https://api.orquestra.dev/api/PROJECT_ID/instructions \
+  -H "X-API-Key: b58_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2"
+```
+
+### Listing API Keys
+
+List all API keys for a project (requires JWT authentication):
+
+```bash
+curl https://api.orquestra.dev/api/projects/PROJECT_ID/keys \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+Response:
+
+```json
+{
+  "keys": [
+    {
+      "id": "key123",
+      "key": "************************c9d0e1f2",
+      "last_used": "2024-03-14T15:20:00.000Z",
+      "created_at": "2024-03-01T10:30:00.000Z",
+      "expires_at": "2024-06-01T10:30:00.000Z"
+    },
+    {
+      "id": "key456",
+      "key": "************************x7y8z9a0",
+      "last_used": null,
+      "created_at": "2024-03-10T12:00:00.000Z",
+      "expires_at": null
+    }
+  ]
+}
+```
+
+<Note>
+  API keys are masked in list responses, showing only the last 8 characters for identification.
+</Note>
+
+### Rotating an API Key
+
+Generate a new key value while keeping the same key ID:
+
+```bash
+curl -X POST https://api.orquestra.dev/api/projects/PROJECT_ID/keys/KEY_ID/rotate \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+Response:
+
+```json
+{
+  "id": "key123",
+  "key": "b58_NEW_KEY_VALUE_HERE",
+  "message": "API key rotated successfully. Store the new key — it will not be shown again."
+}
+```
+
+### Deleting an API Key
+
+```bash
+curl -X DELETE https://api.orquestra.dev/api/projects/PROJECT_ID/keys/KEY_ID \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+Response:
+
+```json
+{
+  "message": "API key deleted"
+}
+```
+
+### API Key Tracking
+
+Each time an API key is used, the `last_used` timestamp is updated. Monitor key usage to:
+
+- Detect unauthorized access
+- Identify unused keys for cleanup
+- Track integration activity
+
+### Error Responses
+
+<ResponseField name="401 - Missing API Key">
+  ```json
+  {
+    "error": "Unauthorized",
+    "message": "Missing X-API-Key header"
+  }
+  ```
+  
+  The `X-API-Key` header is not present in the request.
+</ResponseField>
+
+<ResponseField name="401 - Invalid API Key">
+  ```json
+  {
+    "error": "Unauthorized",
+    "message": "Invalid or expired API key"
+  }
+  ```
+  
+  The API key doesn't exist in the database or has expired.
+</ResponseField>
+
+<ResponseField name="500 - Authentication Failed">
+  ```json
+  {
+    "error": "Authentication failed"
+  }
+  ```
+  
+  Database error during API key validation.
+</ResponseField>
+
+## Optional Authentication
+
+Some endpoints support optional authentication. They work without authentication but provide additional features when authenticated:
+
+- `GET /api/projects` - Shows public projects + your private projects if authenticated
+- `GET /api/projects/:projectId` - Returns `isOwner` flag and API key count if you're the owner
+- `GET /api/:projectId/docs` - Shows custom docs for private projects if you're the owner
+
+### Example: Optional Auth Behavior
+
+```bash
+# Without authentication - only public projects
+curl https://api.orquestra.dev/api/projects
+# Returns: { "projects": [public projects] }
+
+# With authentication - public + private projects
+curl https://api.orquestra.dev/api/projects \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+# Returns: { "projects": [public + your private projects] }
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Store credentials securely">
+    - Never commit JWT tokens or API keys to version control
+    - Use environment variables or secure secret management
+    - For frontend apps, use secure HTTP-only cookies when possible
+  </Accordion>
+  
+  <Accordion title="Use HTTPS only">
+    - Always access the API over HTTPS
+    - Never send credentials over unencrypted connections
+    - The API enforces HTTPS in production
+  </Accordion>
+  
+  <Accordion title="Rotate keys regularly">
+    - Rotate API keys periodically (e.g., every 90 days)
+    - Delete unused or compromised keys immediately
+    - Use the rotation endpoint to update keys without downtime
+  </Accordion>
+  
+  <Accordion title="Limit key scope">
+    - Create separate API keys for different integrations
+    - Set expiration dates on keys when possible
+    - Monitor `last_used` timestamps to detect anomalies
+  </Accordion>
+  
+  <Accordion title="Handle token expiration">
+    - Implement automatic token refresh in your application
+    - Provide clear error messages when tokens expire
+    - Redirect users to re-authenticate when needed
+  </Accordion>
+</AccordionGroup>
+
+## Authentication Example: Complete Flow
+
+Here's a complete example of authenticating and using the API:
+
+```bash
+# 1. Authenticate via GitHub OAuth (in browser or programmatically)
+# User visits: https://api.orquestra.dev/auth/github
+# After authorization, receives JWT token
+
+# 2. Store token
+export ORQUESTRA_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+# 3. Get your user profile
+curl https://api.orquestra.dev/auth/me \
+  -H "Authorization: Bearer $ORQUESTRA_TOKEN"
+
+# 4. List your projects
+curl https://api.orquestra.dev/api/projects/mine \
+  -H "Authorization: Bearer $ORQUESTRA_TOKEN"
+
+# 5. Create an API key for programmatic access
+curl -X POST https://api.orquestra.dev/api/projects/abc123/keys \
+  -H "Authorization: Bearer $ORQUESTRA_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expiresInDays": 90}'
+
+# 6. Store API key securely
+export ORQUESTRA_API_KEY="b58_a1b2c3d4..."
+
+# 7. Use API key for automation
+curl https://api.orquestra.dev/api/abc123/instructions \
+  -H "X-API-Key: $ORQUESTRA_API_KEY"
+```
+
+## Next Steps
+
+<Card title="Projects" icon="folder" href="/api/projects/list">
+  Learn how to manage projects and upload IDLs
+</Card>
+
+<Card title="Instructions" icon="code" href="/api/projects/instructions">
+  Build transactions and interact with program instructions
+</Card>

@@ -1,0 +1,469 @@
+---
+title: 'Project Structure'
+description: 'Understanding the Orquestra monorepo architecture and codebase organization'
+---
+
+## Monorepo Architecture
+
+Orquestra is built as a modern monorepo using **Bun workspaces**, allowing multiple packages to be developed, tested, and deployed together while maintaining clear separation of concerns.
+
+### Technology Stack
+
+- **Package Manager**: Bun 1.0+ (fast, all-in-one toolkit)
+- **Monorepo Tool**: Bun workspaces
+- **Runtime**: Cloudflare Workers (V8 isolates)
+- **Frontend**: React 18 + Vite + Tailwind CSS
+- **Backend**: Hono (ultra-fast edge framework)
+- **Database**: Cloudflare D1 (SQLite at the edge)
+- **Cache**: Cloudflare KV (key-value storage)
+
+## Root Directory Structure
+
+```
+orquestra/
+├── packages/              # Monorepo packages
+│   ├── frontend/         # React SPA (Cloudflare Pages)
+│   ├── worker/           # Hono API (Cloudflare Workers)
+│   ├── cli/              # CLI tools for program discovery
+│   └── shared/           # Shared TypeScript types & utilities
+│
+├── migrations/           # D1 database schema migrations
+│   ├── 001_initial_schema.sql
+│   ├── 002_indexes.sql
+│   └── 003_custom_docs_and_known_addresses.sql
+│
+├── scripts/              # Utility scripts
+│   ├── seed-db.js       # Database seeding
+│   └── setup.js         # Initial setup
+│
+├── docs/                 # Documentation
+│   ├── SETUP_INSTRUCTIONS.md
+│   ├── ARCHITECTURE.md
+│   └── ...
+│
+├── .github/
+│   └── workflows/       # GitHub Actions CI/CD
+│       ├── ci-cd.yml
+│       ├── database.yml
+│       ├── docker.yml
+│       └── copilot-agent.yml
+│
+├── wrangler.toml        # Cloudflare configuration
+├── package.json         # Root workspace configuration
+├── tsconfig.json        # Root TypeScript config
+├── .eslintrc.json       # ESLint configuration
+├── .prettierrc          # Prettier configuration
+└── bun.lock             # Dependency lockfile
+```
+
+## Package: Frontend
+
+React-based single-page application deployed to Cloudflare Pages.
+
+**Location**: `packages/frontend/`
+
+```
+packages/frontend/
+├── src/
+│   ├── App.tsx              # Root component with routing
+│   ├── main.tsx             # Application entry point
+│   ├── index.css            # Global styles (Tailwind)
+│   │
+│   ├── pages/               # Route-based page components
+│   │   ├── Home.tsx
+│   │   ├── Dashboard.tsx
+│   │   ├── ProjectDetail.tsx
+│   │   ├── Explore.tsx
+│   │   └── ...
+│   │
+│   ├── components/          # Reusable UI components
+│   │   ├── Navbar.tsx
+│   │   ├── ProjectCard.tsx
+│   │   ├── CodeBlock.tsx
+│   │   └── ...
+│   │
+│   ├── store/               # Zustand state management
+│   │   └── authStore.ts
+│   │
+│   └── api/                 # API client (Axios)
+│       └── client.ts
+│
+├── assets/                  # Static assets
+│   └── logo.png
+│
+├── public/                  # Public static files
+├── vite.config.ts          # Vite configuration
+├── tailwind.config.js      # Tailwind CSS config
+├── tsconfig.json           # TypeScript config
+└── package.json
+```
+
+### Key Frontend Files
+
+- **App.tsx** (`src/App.tsx:1`): Main routing and layout component
+- **main.tsx** (`src/main.tsx:1`): React app entry point with providers
+- **authStore.ts** (`src/store/authStore.ts:1`): Global authentication state
+- **client.ts** (`src/api/client.ts:1`): Axios instance with interceptors
+
+### Frontend Technologies
+
+- **React 18**: UI library with concurrent features
+- **React Router v6**: Client-side routing
+- **Vite**: Build tool and dev server (HMR)
+- **Tailwind CSS**: Utility-first CSS framework
+- **Zustand**: Lightweight state management
+- **Axios**: HTTP client for API requests
+- **Solana Web3.js**: Blockchain interaction
+
+## Package: Worker
+
+Hono-based REST API backend deployed as a Cloudflare Worker.
+
+**Location**: `packages/worker/`
+
+```
+packages/worker/
+├── src/
+│   ├── index.ts                    # Hono app entry point
+│   │
+│   ├── routes/                     # API route handlers
+│   │   ├── health.ts              # Health check endpoints
+│   │   ├── auth.ts                # GitHub OAuth flow
+│   │   ├── idl.ts                 # IDL upload/management
+│   │   ├── api.ts                 # Generated API endpoints
+│   │   └── llms.ts                # LLM-specific endpoints
+│   │
+│   ├── middleware/                 # HTTP middleware
+│   │   ├── auth.ts                # JWT authentication
+│   │   ├── cache.ts               # KV caching layer
+│   │   ├── error-handler.ts       # Global error handling
+│   │   ├── rate-limit.ts          # Rate limiting
+│   │   ├── request-logger.ts      # Request logging
+│   │   └── performance.ts         # Performance monitoring
+│   │
+│   └── services/                   # Business logic
+│       ├── idl-parser.ts          # IDL validation & parsing
+│       ├── tx-builder.ts          # Transaction serialization
+│       ├── doc-generator.ts       # Markdown documentation
+│       ├── pda.ts                 # Program Derived Addresses
+│       ├── jwt.ts                 # JWT signing/verification
+│       ├── validation.ts          # Input validation (Zod)
+│       └── logger.ts              # Structured logging
+│
+├── tests/                          # Unit tests
+│   └── ...
+│
+├── tsconfig.json                   # TypeScript config
+└── package.json
+```
+
+### Key Worker Files
+
+- **index.ts** (`src/index.ts:1`): Main Hono application with middleware setup
+- **api.ts** (`src/routes/api.ts:1`): Dynamic API routes for IDL projects
+- **idl-parser.ts** (`src/services/idl-parser.ts:1`): Core IDL processing logic
+- **tx-builder.ts** (`src/services/tx-builder.ts:1`): Solana transaction building
+- **doc-generator.ts** (`src/services/doc-generator.ts:1`): AI-optimized docs generation
+
+### Worker Architecture
+
+```
+Request Flow:
+  ↓
+[CORS + Logger]
+  ↓
+[Performance Monitor]
+  ↓
+[Error Handler]
+  ↓
+[Rate Limiting] (for /api/*)
+  ↓
+[Authentication] (JWT or API Key)
+  ↓
+[Caching Layer] (KV)
+  ↓
+[Route Handler]
+  ↓
+[Business Logic Service]
+  ↓
+[Database Query (D1)]
+  ↓
+Response
+```
+
+### Worker Technologies
+
+- **Hono**: Fast, lightweight web framework
+- **Cloudflare Workers**: Edge computing runtime
+- **Cloudflare D1**: Distributed SQLite database
+- **Cloudflare KV**: Low-latency key-value store
+- **Zod**: TypeScript-first schema validation
+- **Web Crypto API**: JWT signing (no Node.js dependencies)
+
+## Package: Shared
+
+Shared TypeScript types and utilities used across packages.
+
+**Location**: `packages/shared/`
+
+```
+packages/shared/
+├── src/
+│   ├── index.ts          # Main export file
+│   ├── types.ts          # Shared TypeScript interfaces
+│   └── utils.ts          # Common utility functions
+│
+├── tsconfig.json
+└── package.json
+```
+
+### Key Shared Types
+
+- **User**: User account structure
+- **Project**: IDL project metadata
+- **IdlVersion**: IDL version with history
+- **ApiKey**: API authentication keys
+- **Idl**: Anchor IDL type definitions
+
+### Shared Utilities
+
+- String manipulation helpers
+- Date formatting functions
+- Common validation logic
+
+## Package: CLI
+
+Command-line tools for discovering and analyzing Solana programs on-chain.
+
+**Location**: `packages/cli/`
+
+```
+packages/cli/
+├── src/
+│   ├── index.ts                   # CLI entry point
+│   │
+│   ├── commands/                  # CLI commands
+│   │   ├── scan.ts               # Scan all programs
+│   │   └── check-idl.ts          # Check IDL availability
+│   │
+│   └── lib/                       # CLI utilities
+│       ├── rpc.ts                # RPC client wrapper
+│       ├── idl-detection.ts      # IDL detection logic
+│       ├── checkpoint.ts         # Resume support
+│       └── progress.ts           # Progress tracking
+│
+├── tsconfig.json
+└── package.json
+```
+
+### CLI Commands
+
+```bash
+# Scan all executable programs on Solana
+bun run cli:scan -- --rpc-url <url> --out-dir ./output
+
+# Check which programs have on-chain IDLs
+bun run cli:check-idl -- --rpc-url <url> --out-dir ./output
+
+# Run full pipeline (scan + check IDL)
+bun run cli:full -- --rpc-url <url> --out-dir ./output
+```
+
+### CLI Features
+
+- **Program Discovery**: Finds all programs using BPF loaders
+- **IDL Detection**: Checks for Anchor IDL accounts
+- **Resume Support**: Checkpoint-based resumption
+- **Rate Limiting**: Automatic retry with backoff
+- **Progress Tracking**: Real-time progress indicators
+- **CSV Output**: Structured data export
+
+## Database Migrations
+
+Database schema is managed through migration files in `migrations/`:
+
+**Location**: `migrations/`
+
+### Migration Files
+
+1. **001_initial_schema.sql** - Core tables
+   - users
+   - projects
+   - idl_versions
+   - api_keys
+   - project_socials
+
+2. **002_indexes.sql** - Performance indexes
+   - User lookup indexes
+   - Project query indexes
+   - API key indexes
+
+3. **003_custom_docs_and_known_addresses.sql**
+   - Custom documentation support
+   - Known addresses table
+
+See [Database Schema](/development/database-schema) for detailed schema documentation.
+
+## Configuration Files
+
+### wrangler.toml
+
+**Location**: `wrangler.toml:1`
+
+Cloudflare Workers configuration:
+
+```toml
+name = "orquestra"
+main = "packages/worker/src/index.ts"
+compatibility_date = "2024-01-01"
+
+# D1 Database bindings
+[[d1_databases]]
+binding = "DB"
+database_name = "orquestra-prod"
+
+# KV Namespace bindings
+[[kv_namespaces]]
+binding = "IDLS"  # IDL storage
+
+[[kv_namespaces]]
+binding = "CACHE"  # API response caching
+```
+
+The file includes separate environments:
+- **Development**: Local testing with dev bindings
+- **Production**: Live environment with prod bindings
+
+### package.json
+
+**Location**: `package.json:1`
+
+Workspace configuration and scripts. See [Local Setup](/development/local-setup) for available scripts.
+
+### tsconfig.json
+
+**Location**: `tsconfig.json:1`
+
+Root TypeScript configuration with:
+- Strict type checking
+- Path aliases for imports
+- Composite project references
+
+## Development Patterns
+
+### Monorepo Package References
+
+Packages reference each other using workspace dependencies:
+
+```json
+// packages/worker/package.json
+{
+  "dependencies": {
+    "@orquestra/shared": "workspace:*"
+  }
+}
+```
+
+Import shared code:
+
+```typescript
+import { User, Project } from '@orquestra/shared'
+```
+
+### Type Safety
+
+All packages use strict TypeScript:
+- No implicit any
+- Strict null checks
+- Shared types in `packages/shared`
+
+### Code Organization
+
+Follow the established patterns:
+- **Routes**: Handle HTTP requests, minimal logic
+- **Services**: Business logic and data processing
+- **Middleware**: Cross-cutting concerns (auth, logging)
+- **Types**: Centralized in `shared` package
+
+### Environment Variables
+
+Environment-specific configuration:
+- **Local**: `.env.local` in root
+- **Workers**: `wrangler.toml` vars section
+- **Secrets**: `wrangler secret put <NAME>`
+
+## Build System
+
+### Build Process
+
+```bash
+# Build all packages in dependency order
+npm run build
+
+# 1. packages/shared (used by others)
+# 2. packages/frontend (Vite build)
+# 3. packages/worker (TypeScript build)
+```
+
+### Build Outputs
+
+- **Frontend**: `packages/frontend/dist/` - Static files for Pages
+- **Worker**: Bundled by Wrangler at deployment time
+- **Shared**: `packages/shared/dist/` - Compiled TypeScript
+
+## Testing Strategy
+
+### Unit Tests
+
+Worker tests in `packages/worker/tests/`:
+
+```bash
+cd packages/worker
+bun test
+```
+
+### Type Checking
+
+Validate types across all packages:
+
+```bash
+npm run type-check
+```
+
+### Linting
+
+Code quality checks:
+
+```bash
+npm run lint
+npm run lint:fix
+```
+
+## Deployment Structure
+
+### Frontend Deployment
+
+- **Platform**: Cloudflare Pages
+- **Build Output**: `packages/frontend/dist/`
+- **Build Command**: `npm run build:frontend`
+- **URL**: https://orquestra.dev
+
+### Worker Deployment
+
+- **Platform**: Cloudflare Workers
+- **Entry Point**: `packages/worker/src/index.ts`
+- **Build Command**: `npm run build:worker`
+- **URL**: https://api.orquestra.dev
+
+### Database
+
+- **Platform**: Cloudflare D1
+- **Migrations**: Applied via `wrangler d1 execute`
+- **Environments**: `orquestra-dev`, `orquestra-prod`
+
+## Next Steps
+
+- Review [Local Setup](/development/local-setup) to get started
+- Understand [Database Schema](/development/database-schema)
+- Explore the [API Reference](/api-reference)
+- Check [Contributing Guidelines](https://github.com/berkayozrunc/orquestra/blob/main/CONTRIBUTING.md)

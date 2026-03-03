@@ -1,0 +1,561 @@
+---
+title: 'Frontend Architecture'
+description: 'React 18 application structure, state management, and component patterns'
+icon: 'react'
+---
+
+## Technology Stack
+
+### Core Technologies
+
+<CardGroup cols={2}>
+  <Card title="React 18" icon="react">
+    Modern UI library with concurrent features and automatic batching
+  </Card>
+  <Card title="TypeScript 5.3" icon="code">
+    Type-safe development with strict mode enabled
+  </Card>
+  <Card title="Vite" icon="bolt">
+    Lightning-fast build tool with HMR and optimized production builds
+  </Card>
+  <Card title="Tailwind CSS" icon="palette">
+    Utility-first CSS framework with custom design system
+  </Card>
+</CardGroup>
+
+### Dependencies
+
+```json package.json
+{
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.1",
+    "zustand": "^4.4.6",
+    "axios": "^1.6.2",
+    "@solana/web3.js": "^1.87.6",
+    "@solana/wallet-adapter-react": "^0.15.35",
+    "lucide-react": "^0.294.0",
+    "clsx": "^2.0.0"
+  }
+}
+```
+
+## Project Structure
+
+```
+packages/frontend/
+├── src/
+│   ├── App.tsx                 # Root component with routing
+│   ├── main.tsx                # Entry point
+│   │
+│   ├── components/             # Reusable UI components
+│   │   ├── Header.tsx          # Navigation header
+│   │   ├── Footer.tsx          # Site footer
+│   │   ├── Layout.tsx          # Page layout wrapper
+│   │   ├── IDLUpload.tsx       # IDL file upload component
+│   │   ├── InstructionExplorer.tsx  # Instruction browser
+│   │   ├── PDAExplorer.tsx     # PDA derivation tool
+│   │   ├── ProjectCard.tsx     # Project list item
+│   │   └── Toast.tsx           # Notification system
+│   │
+│   ├── pages/                  # Page components
+│   │   ├── Home.tsx            # Landing page
+│   │   ├── Dashboard.tsx       # User dashboard
+│   │   ├── Explorer.tsx        # Public project explorer
+│   │   ├── ProjectDetail.tsx   # Project details view
+│   │   ├── AuthCallback.tsx    # OAuth callback handler
+│   │   ├── AuthError.tsx       # Auth error page
+│   │   └── NotFound.tsx        # 404 page
+│   │
+│   ├── store/                  # Zustand state management
+│   │   ├── auth.ts             # Authentication state
+│   │   └── projects.ts         # Projects state
+│   │
+│   ├── api/                    # API client
+│   │   └── client.ts           # Axios instance with interceptors
+│   │
+│   └── types/                  # TypeScript definitions
+│       └── index.ts            # Shared types
+│
+├── assets/                     # Static assets
+│   ├── logo.png
+│   └── favicon.ico
+│
+├── index.html                  # HTML template
+├── vite.config.ts              # Vite configuration
+├── tailwind.config.js          # Tailwind CSS config
+├── tsconfig.json               # TypeScript config
+└── package.json
+```
+
+## Application Architecture
+
+### Routing Setup
+
+The application uses **React Router v6** for client-side routing:
+
+```tsx App.tsx
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import Layout from '@/components/Layout'
+import Home from '@/pages/Home'
+import Dashboard from '@/pages/Dashboard'
+import Explorer from '@/pages/Explorer'
+import ProjectDetail from '@/pages/ProjectDetail'
+import AuthCallback from '@/pages/AuthCallback'
+import { useAuthStore } from '@/store/auth'
+
+function App(): JSX.Element {
+  const initialize = useAuthStore((s) => s.initialize)
+
+  useEffect(() => {
+    initialize() // Load user from localStorage on mount
+  }, [initialize])
+
+  return (
+    <ToastProvider>
+      <Router>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/explorer" element={<Explorer />} />
+            <Route path="/project/:projectId" element={<ProjectDetail />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </Router>
+    </ToastProvider>
+  )
+}
+```
+
+### Layout Component
+
+Shared layout with header and footer:
+
+```tsx Layout.tsx
+import { Outlet } from 'react-router-dom'
+import Header from './Header'
+import Footer from './Footer'
+
+export default function Layout() {
+  return (
+    <div className="min-h-screen flex flex-col bg-dark-900">
+      <Header />
+      <main className="flex-1">
+        <Outlet /> {/* Nested routes render here */}
+      </main>
+      <Footer />
+    </div>
+  )
+}
+```
+
+## State Management with Zustand
+
+### Authentication Store
+
+Manages user authentication state:
+
+```tsx store/auth.ts
+import { create } from 'zustand'
+import { fetchCurrentUser } from '../api/client'
+
+interface User {
+  id: string
+  username: string
+  email: string
+  avatar_url: string
+  projectCount?: number
+}
+
+interface AuthState {
+  user: User | null
+  token: string | null
+  isLoading: boolean
+  isAuthenticated: boolean
+
+  setToken: (token: string) => void
+  setUser: (user: User) => void
+  loadUser: () => Promise<void>
+  logout: () => void
+  initialize: () => Promise<void>
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
+  user: null,
+  token: localStorage.getItem('token'),
+  isLoading: true,
+  isAuthenticated: false,
+
+  setToken: (token: string) => {
+    localStorage.setItem('token', token)
+    set({ token, isAuthenticated: true })
+  },
+
+  setUser: (user: User) => {
+    localStorage.setItem('user', JSON.stringify(user))
+    set({ user, isAuthenticated: true })
+  },
+
+  loadUser: async () => {
+    try {
+      set({ isLoading: true })
+      const user = await fetchCurrentUser()
+      set({ user, isAuthenticated: true, isLoading: false })
+      localStorage.setItem('user', JSON.stringify(user))
+    } catch {
+      set({ user: null, isAuthenticated: false, isLoading: false })
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+    }
+  },
+
+  logout: () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    set({ user: null, token: null, isAuthenticated: false })
+  },
+
+  initialize: async () => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      set({ token })
+      // Try to load cached user first for instant UI
+      const cachedUser = localStorage.getItem('user')
+      if (cachedUser) {
+        try {
+          set({ user: JSON.parse(cachedUser), isAuthenticated: true })
+        } catch {}
+      }
+      // Then refresh from API
+      await get().loadUser()
+    } else {
+      set({ isLoading: false })
+    }
+  },
+}))
+```
+
+**Usage in Components:**
+
+```tsx
+import { useAuthStore } from '@/store/auth'
+
+function Dashboard() {
+  const { user, isAuthenticated, logout } = useAuthStore()
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" />
+  }
+
+  return (
+    <div>
+      <h1>Welcome, {user?.username}</h1>
+      <button onClick={logout}>Logout</button>
+    </div>
+  )
+}
+```
+
+### Projects Store
+
+Manages project list and selection:
+
+```tsx store/projects.ts
+import { create } from 'zustand'
+
+interface Project {
+  id: string
+  name: string
+  description: string
+  program_id: string
+  is_public: boolean
+  created_at: string
+}
+
+interface ProjectsState {
+  projects: Project[]
+  selectedProject: Project | null
+  isLoading: boolean
+
+  setProjects: (projects: Project[]) => void
+  selectProject: (project: Project) => void
+  addProject: (project: Project) => void
+  removeProject: (id: string) => void
+}
+
+export const useProjectsStore = create<ProjectsState>((set) => ({
+  projects: [],
+  selectedProject: null,
+  isLoading: false,
+
+  setProjects: (projects) => set({ projects }),
+  selectProject: (project) => set({ selectedProject: project }),
+  addProject: (project) =>
+    set((state) => ({ projects: [...state.projects, project] })),
+  removeProject: (id) =>
+    set((state) => ({
+      projects: state.projects.filter((p) => p.id !== id),
+    })),
+}))
+```
+
+## API Client
+
+Axios instance with authentication interceptors:
+
+```tsx api/client.ts
+import axios from 'axios'
+import { useAuthStore } from '@/store/auth'
+
+const client = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || '/api',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+// Add auth token to requests
+client.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// Handle 401 responses
+client.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      useAuthStore.getState().logout()
+      window.location.href = '/'
+    }
+    return Promise.reject(error)
+  }
+)
+
+export default client
+```
+
+## Design System
+
+### Tailwind Configuration
+
+Custom design tokens:
+
+```js tailwind.config.js
+export default {
+  theme: {
+    extend: {
+      colors: {
+        primary: '#14F195',     // Solana green
+        secondary: '#00D9FF',   // Cyan
+        accent: '#FF3333',      // Red
+        dark: {
+          900: '#0a0f0d',       // Background
+          850: '#1a2e25',       // Surface
+          800: '#2f2f5e',       // Elevated
+        },
+        surface: {
+          DEFAULT: '#0d1411',
+          elevated: '#111d18',
+          card: '#152219',
+        },
+      },
+      fontFamily: {
+        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      },
+      animation: {
+        'pulse-primary': 'pulse-primary 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'glow': 'glow 2s ease-in-out infinite alternate',
+      },
+    },
+  },
+}
+```
+
+### Component Patterns
+
+**Button Component:**
+
+```tsx
+import clsx from 'clsx'
+
+interface ButtonProps {
+  variant?: 'primary' | 'secondary' | 'outline'
+  size?: 'sm' | 'md' | 'lg'
+  children: React.ReactNode
+  onClick?: () => void
+}
+
+export function Button({ variant = 'primary', size = 'md', children, onClick }: ButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'font-medium rounded-lg transition-all',
+        {
+          'bg-primary text-dark-900 hover:bg-primary/90': variant === 'primary',
+          'bg-secondary text-dark-900 hover:bg-secondary/90': variant === 'secondary',
+          'border-2 border-primary text-primary hover:bg-primary/10': variant === 'outline',
+        },
+        {
+          'px-3 py-1.5 text-sm': size === 'sm',
+          'px-4 py-2 text-base': size === 'md',
+          'px-6 py-3 text-lg': size === 'lg',
+        }
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+```
+
+## Build Configuration
+
+### Vite Setup
+
+```ts vite.config.ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
+
+export default defineConfig({
+  plugins: [react()],
+  publicDir: 'assets',
+  resolve: {
+    alias: {
+      '@shared': path.resolve(__dirname, '../shared/src'),
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://api.orquestra.dev',
+        changeOrigin: true,
+      },
+      '/auth/github': {
+        target: 'http://api.orquestra.dev',
+        changeOrigin: true,
+      },
+    },
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    minify: 'terser',
+    chunkSizeWarningLimit: 1000,
+  },
+})
+```
+
+## Performance Optimizations
+
+### Code Splitting
+
+```tsx
+import { lazy, Suspense } from 'react'
+
+const ProjectDetail = lazy(() => import('@/pages/ProjectDetail'))
+
+function App() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <Routes>
+        <Route path="/project/:id" element={<ProjectDetail />} />
+      </Routes>
+    </Suspense>
+  )
+}
+```
+
+### Image Optimization
+
+- Use Cloudflare Image Resizing for avatars
+- Lazy load images below the fold
+- WebP format with PNG fallback
+
+### Bundle Optimization
+
+```bash
+# Production build stats
+Chunk Size Limit: 1000 KB
+Gzip Compression: Enabled
+Tree Shaking:     Enabled
+Minification:     Terser
+```
+
+## Development Workflow
+
+### Local Development
+
+```bash
+# Start dev server with HMR
+bun run dev:frontend
+
+# Build for production
+bun run build
+
+# Preview production build
+bun run preview
+
+# Type checking
+bun run type-check
+
+# Linting
+bun run lint:fix
+```
+
+### Environment Variables
+
+```env .env.local
+VITE_API_URL=http://localhost:8787
+VITE_FRONTEND_URL=http://localhost:5173
+```
+
+## Testing Strategy
+
+### Unit Tests (Planned)
+
+```tsx
+import { render, screen } from '@testing-library/react'
+import { Button } from '@/components/Button'
+
+test('renders button with text', () => {
+  render(<Button>Click me</Button>)
+  expect(screen.getByText('Click me')).toBeInTheDocument()
+})
+```
+
+### E2E Tests (Planned)
+
+- Cypress or Playwright for user flows
+- Test authentication flow
+- Test IDL upload and project creation
+- Test transaction building
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Backend Architecture" icon="server" href="/development/backend">
+    Hono API, services, and middleware
+  </Card>
+  <Card title="System Architecture" icon="sitemap" href="/development/architecture">
+    High-level system design and data flow
+  </Card>
+  <Card title="Component Library" icon="palette" href="/components/overview">
+    Reusable UI components
+  </Card>
+  <Card title="API Reference" icon="book" href="/api-reference/introduction">
+    API endpoints and schemas
+  </Card>
+</CardGroup>

@@ -1,0 +1,190 @@
+---
+title: 'Delete Project'
+api: 'DELETE /api/idl/:projectId'
+description: 'Delete a project and all associated IDL versions'
+---
+
+## Overview
+
+Permanently deletes a project and all associated data including IDL versions, API keys, known addresses, social links, and cached documentation. This operation cannot be undone.
+
+## Authentication
+
+This endpoint requires authentication. You must be the project owner to delete it.
+
+## Path Parameters
+
+<ParamField path="projectId" type="string" required>
+  The unique project identifier to delete.
+</ParamField>
+
+## Request Body
+
+<ParamField body="confirmName" type="string" required>
+  The exact project name to confirm deletion. This safeguard prevents accidental deletions.
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Confirmation message indicating successful deletion.
+</ResponseField>
+
+<ResponseField name="projectId" type="string">
+  The ID of the deleted project.
+</ResponseField>
+
+## Error Codes
+
+<ResponseField name="400" type="Bad Request">
+  **Confirmation required**: The `confirmName` field is missing or does not match the project name exactly. Response includes `requiredName` field showing the expected name.
+</ResponseField>
+
+<ResponseField name="401" type="Unauthorized">
+  Missing or invalid authentication token.
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Project not found or access denied. You must be the project owner to delete.
+</ResponseField>
+
+<ResponseField name="500" type="Internal Server Error">
+  Server error during deletion. Response includes error `details`.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.orquestra.dev/api/idl/abc123def456 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -d '{
+    "confirmName": "My Token Program"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.orquestra.dev/api/idl/abc123def456', {
+  method: 'DELETE',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_API_TOKEN'
+  },
+  body: JSON.stringify({
+    confirmName: 'My Token Program'
+  })
+});
+
+const data = await response.json();
+console.log(data);
+```
+
+```python Python
+import requests
+
+response = requests.delete(
+    'https://api.orquestra.dev/api/idl/abc123def456',
+    headers={
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer YOUR_API_TOKEN'
+    },
+    json={
+        'confirmName': 'My Token Program'
+    }
+)
+
+print(response.json())
+```
+</CodeGroup>
+
+### Success Response (200)
+
+```json
+{
+  "message": "Project and all associated data deleted",
+  "projectId": "abc123def456"
+}
+```
+
+### Error Response (400 - Name Mismatch)
+
+```json
+{
+  "error": "Confirmation required: please provide the project name to confirm deletion",
+  "requiredName": "My Token Program"
+}
+```
+
+### Error Response (404 - Access Denied)
+
+```json
+{
+  "error": "Project not found or access denied"
+}
+```
+
+## What Gets Deleted
+
+Deleting a project removes all associated data:
+
+- **Project record**: Main project entry with metadata
+- **IDL versions**: All versions of the IDL (version history is lost)
+- **Known addresses**: Custom address labels and configurations
+- **API keys**: All API keys associated with the project
+- **Project socials**: Social media links and community information
+- **KV cache entries**: Cached IDL data and generated documentation
+- **Documentation cache**: Pre-generated API documentation
+
+## Authorization Requirements
+
+- You must be authenticated (valid bearer token required)
+- You must be the owner of the project (created by your user account)
+- The project must exist in your account
+
+## Safety Features
+
+### Name Confirmation
+
+To prevent accidental deletion, you must provide the exact project name in the `confirmName` field. The comparison is case-sensitive and must match exactly.
+
+**Example:**
+- Project name: `"My Token Program"`
+- Valid confirmation: `"My Token Program"` ✓
+- Invalid confirmation: `"my token program"` ✗
+- Invalid confirmation: `"My Token Program "` ✗ (trailing space)
+
+### Cascading Deletion
+
+The endpoint performs cascading deletion to ensure no orphaned records remain:
+
+1. Known addresses deleted
+2. API keys deleted
+3. Project socials deleted
+4. IDL versions deleted
+5. Project record deleted
+6. KV cache cleared
+7. Documentation cache cleared
+
+## Important Warnings
+
+<Warning>
+  **This operation is irreversible.** Once deleted, the project and all its data cannot be recovered. Make sure to:
+  
+  - Export any data you need before deletion
+  - Verify you're deleting the correct project
+  - Update any external integrations that reference this project
+  - Notify team members if this is a shared resource
+</Warning>
+
+<Warning>
+  **API keys will stop working immediately.** Any applications using API keys associated with this project will lose access as soon as the deletion completes.
+</Warning>
+
+## Best Practices
+
+- **Backup first**: Download the IDL and any associated documentation before deletion
+- **Check dependencies**: Ensure no active applications depend on this project's API keys
+- **Double-check the name**: Verify the project name is correct before submitting
+- **Use archived status**: Consider marking projects as archived instead of deleting if you might need them later
+- **Team coordination**: Notify team members before deleting shared projects

@@ -1,0 +1,245 @@
+---
+title: 'How It Works'
+description: 'Understand Orquestra system architecture and deployment'
+icon: 'diagram-project'
+---
+
+## System Architecture
+
+Orquestra is built on a modern, serverless architecture leveraging Cloudflare's edge network for global performance and scalability.
+
+### High-Level Flow
+
+The system follows a straightforward pipeline from IDL upload to transaction generation:
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│ IDL Upload  │ ──▶ │ IDL Parsing  │ ──▶ │ API Generation  │ ──▶ │ Transaction      │
+│             │     │ & Validation │     │ & Documentation │     │ Building         │
+└─────────────┘     └──────────────┘     └─────────────────┘     └──────────────────┘
+```
+
+1. **IDL Upload**: User uploads an Anchor IDL JSON file via the dashboard
+2. **IDL Parsing**: System validates the IDL structure and extracts metadata
+3. **API Generation**: RESTful endpoints are automatically created for each instruction
+4. **Transaction Building**: Users call endpoints with parameters to build Solana transactions
+
+## Component Architecture
+
+### Frontend (React SPA)
+
+**Location**: `packages/frontend/`
+
+- **Stack**: React 18 + TypeScript + Tailwind CSS + Vite
+- **Deployment**: Cloudflare Pages (static + dynamic assets)
+- **Features**:
+  - GitHub OAuth authentication
+  - IDL upload & project management
+  - API key management
+  - Usage analytics dashboard
+  - Interactive API explorer
+
+### Backend (Hono + Workers)
+
+**Location**: `packages/worker/`
+
+- **Stack**: Hono + TypeScript + Cloudflare Workers
+- **Runtime**: Cloudflare Workers (V8 Edge Runtime)
+- **Features**:
+  - RESTful API endpoints
+  - IDL parsing and validation
+  - Transaction building engine
+  - Markdown documentation generation
+  - GitHub OAuth integration
+
+<Info>
+  The backend runs entirely on Cloudflare's edge network, ensuring low latency worldwide
+  with automatic scaling.
+</Info>
+
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     End Users                               │
+└─────────────┬───────────────────────────────────────────────┘
+              │
+    ┌─────────┴──────────┐
+    │                    │
+┌───▼──────────┐   ┌─────▼───────────┐
+│   Frontend   │   │   API Explorer  │
+│ (React SPA)  │   │   & Dashboard   │
+└──────┬───────┘   └─────────┬───────┘
+       │                     │
+       └──────────┬──────────┘
+                  │
+     ┌────────────▼────────────────────┐
+     │  Cloudflare Workers (Hono)      │
+     │  ──────────────────────────────  │
+     │  - Auth (GitHub OAuth)          │
+     │  - IDL Management               │
+     │  - Transaction Building         │
+     │  - Documentation Generation     │
+     └────────┬───────────┬────────────┘
+              │           │
+     ┌────────▼───────────▼─────────┐
+     │  Cloudflare Infrastructure   │
+     │  D1 │ KV │ Cache │ HTTP/2    │
+     └────────┬───────────┬─────────┘
+              │           │
+     ┌────────▼───────────▼─────────┐
+     │  Solana RPC Endpoints        │
+     │  (devnet, testnet, mainnet)  │
+     └──────────────────────────────┘
+```
+
+## Edge Deployment
+
+### Why Cloudflare Workers?
+
+Orquestra runs on Cloudflare Workers for several key advantages:
+
+- **Global Edge Network**: Code runs in 300+ data centers worldwide
+- **Automatic Scaling**: Handles millions of requests without configuration
+- **Zero Cold Starts**: Workers start in less than 1ms
+- **Cost Effective**: Pay only for actual usage
+- **Integrated Storage**: D1 database and KV store built-in
+
+<Accordion title="Edge Runtime Benefits">
+  Traditional serverless platforms like AWS Lambda have cold start penalties (100ms-1s). 
+  Cloudflare Workers eliminate this by using V8 isolates that start instantly.
+  
+  Additionally, Workers run in the same data center closest to your users, reducing latency
+  from 100ms+ to under 10ms globally.
+</Accordion>
+
+## Data Storage
+
+### D1 Database (SQLite)
+
+Stores structured data with automatic replication:
+
+- **users**: Authenticated user accounts
+- **projects**: Solana programs/projects
+- **idl_versions**: IDL version history
+- **api_keys**: API credentials for private projects
+- **project_socials**: Project metadata and social links
+
+### KV Store (Key-Value)
+
+Caches frequently accessed data:
+
+- **IDL Cache**: `idl:{projectId}:{version}` (TTL: 1 week)
+- **General Cache**: `cache:{type}:{id}` (variable TTL)
+
+<Note>
+  KV provides eventual consistency with global replication. Data is available in under 60 seconds
+  worldwide after write.
+</Note>
+
+## Request Flow
+
+### Authentication Flow
+
+```
+User → GitHub OAuth → Worker Auth Handler → JWT Token → Frontend Storage
+```
+
+**Steps**:
+1. User clicks "Sign in with GitHub"
+2. Redirects to GitHub OAuth authorization
+3. GitHub redirects to `/auth/github/callback` with code
+4. Worker exchanges code for access token
+5. Fetches user data from GitHub API
+6. Creates/updates user in D1 database
+7. Returns JWT token (7-day expiration)
+8. Frontend stores token in localStorage
+9. Includes token in `Authorization` header for requests
+
+### Transaction Building Flow
+
+```
+User → Input Data → POST /build → Parse Inputs → Build IX → Serialize TX
+```
+
+**Steps**:
+1. User provides instruction name, accounts, and arguments
+2. Sends POST to `/api/{projectId}/instructions/{name}/build`
+3. Worker validates request data against IDL schema
+4. Derives PDAs if needed from seed templates
+5. Constructs Solana instruction with data
+6. Builds transaction with recent blockhash
+7. Serializes to base58 format
+8. Returns serialized transaction + metadata
+
+## Performance Optimizations
+
+### Caching Strategy
+
+1. **KV Cache**: IDL and docs cached for 1 week
+2. **HTTP Cache**: Static assets cached for 1 year (immutable)
+3. **Browser Cache**: JS/CSS bundles with content hashing
+4. **Database Query Cache**: Frequently accessed data memoized
+
+### Load Reduction
+
+- **Code Splitting**: Vite splits JS into route-based chunks
+- **Asset Compression**: Automatic gzip/brotli compression
+- **Lazy Loading**: Pages and components loaded on demand
+- **Image Optimization**: Cloudflare Image Resize for avatars
+
+<Warning>
+  D1 has a 1MB row size limit. Large IDLs (>1MB) are stored with compression or
+  split across multiple rows.
+</Warning>
+
+## Scalability
+
+### Horizontal Scaling
+
+- **Workers**: Automatically scale across Cloudflare's network
+- **D1**: Distributed database scales with usage
+- **KV**: Globally distributed key-value store
+
+### Rate Limiting
+
+Protects against abuse:
+
+- Per IP per endpoint (100 req/min)
+- Per API key for private projects (1000 req/hr)
+- Per user account (500 req/min)
+
+## Development Workflow
+
+### Local Development
+
+```bash
+# Start frontend dev server (Vite)
+npm run dev:frontend
+
+# Start worker dev server (Wrangler)
+npm run dev:worker
+```
+
+Frontend proxies API calls to worker via configured proxy in `vite.config.ts`.
+
+### Building & Deployment
+
+```bash
+# Type checking and linting
+npm run typecheck
+npm run lint
+
+# Build all packages
+npm run build
+
+# Deploy worker to Cloudflare
+npm run deploy:worker
+
+# Deploy frontend to Cloudflare Pages
+npm run deploy:frontend
+```
+
+<Info>
+  GitHub Actions automatically deploys on push to `main` (production) or `develop` (staging).
+</Info>

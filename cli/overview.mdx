@@ -1,0 +1,199 @@
+---
+title: CLI Overview
+description: Command-line tools for discovering and analyzing Solana programs on-chain
+---
+
+The Orquestra CLI provides utilities for discovering and analyzing Solana programs on-chain. It can scan entire clusters for executable programs and check which programs have Anchor on-chain IDLs.
+
+## What the CLI Does
+
+The Orquestra CLI provides three main capabilities:
+
+- **Scan** entire Solana clusters for executable programs
+- **Check** which programs have on-chain Anchor IDL
+- **Export** results to CSV for analysis
+
+This is particularly useful for:
+- Discovering programs with on-chain IDLs for automatic API generation
+- Analyzing the Solana program ecosystem
+- Building program registries and discovery tools
+- Importing programs into Orquestra without manual IDL upload
+
+## Installation
+
+The CLI is part of the Orquestra monorepo in the `packages/cli` package:
+
+```bash
+cd orquestra
+bun install
+```
+
+## Available Commands
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| `scan` | Discover all executable programs on a cluster | `programs.csv` |
+| `check-idl` | Check which programs have on-chain Anchor IDL | `program_idl_status.csv` |
+| `full` | Run both scan + check-idl sequentially | Both CSVs |
+
+## Quick Start
+
+### Scan Programs
+
+Discover all executable programs on Solana mainnet:
+
+<CodeGroup>
+```bash Mainnet Scan
+bun run cli:scan -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+```
+
+```bash Limited Scan
+bun run cli:scan -- --rpc-url 'https://api.mainnet-beta.solana.com' --max-programs 100
+```
+
+```bash Devnet Scan
+bun run cli:scan -- --rpc-url 'https://api.devnet.solana.com' --out-dir ./devnet-scan
+```
+</CodeGroup>
+
+### Check On-Chain IDL
+
+Check which programs have Anchor IDL accounts:
+
+<CodeGroup>
+```bash After Scan
+bun run cli:check-idl -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+```
+
+```bash Custom Programs
+echo '["MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD","JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"]' > programs.json
+bun run cli:check-idl -- --rpc-url 'https://api.mainnet-beta.solana.com' --input-file ./programs.json
+```
+
+```bash Resume Check
+bun run cli:check-idl -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output --resume
+```
+</CodeGroup>
+
+### Full Pipeline
+
+Run both commands sequentially:
+
+```bash
+bun run cli:full -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+```
+
+## Global Options
+
+All commands support these options:
+
+| Option | Description | Default | Required |
+|--------|-------------|---------|----------|
+| `--rpc-url <url>` | Solana RPC endpoint URL | `$SOLANA_RPC_URL` env | ✅ |
+| `--out-dir <dir>` | Output directory for CSV files | `./output` | ❌ |
+| `--rps <n>` | Max requests per second (rate limit) | `10` | ❌ |
+| `--resume` | Resume from previous checkpoint | `false` | ❌ |
+| `--help` | Show help message | - | ❌ |
+
+## Output Files
+
+| File | Description | Can be deleted? |
+|------|-------------|----------------|
+| `programs.csv` | Final program list | ❌ Keep |
+| `program_idl_status.csv` | Final IDL status | ❌ Keep |
+| `.program-list.json` | Intermediate data for check-idl | ✅ After check-idl completes |
+| `.checkpoint-scan.json` | Resume checkpoint for scan | ✅ After scan completes |
+| `.checkpoint-idl.json` | Resume checkpoint for check-idl | ✅ After check-idl completes |
+
+## Rate Limiting Strategies
+
+### Public RPCs
+
+Public RPCs like `api.mainnet-beta.solana.com` have strict rate limits:
+
+```bash
+bun run cli:scan -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --max-programs 100 \
+  --rps 2
+```
+
+- Use `--rps 2` to `--rps 5`
+- Expect frequent 429 errors; the tool will retry automatically
+- Consider using `--max-programs` to limit scope
+
+### Premium RPCs
+
+Premium RPCs (Helius, QuickNode, etc.) have higher rate limits:
+
+```bash
+bun run cli:scan -- \
+  --rpc-url 'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY' \
+  --rps 20 \
+  --batch-size 100
+```
+
+- Use `--rps 10` to `--rps 50` depending on tier
+- More reliable for large scans
+- Recommended for full cluster scans
+
+## Example Use Cases
+
+### Find All Anchor Programs
+
+```bash
+# Step 1: Scan all programs
+bun run cli:scan -- \
+  --rpc-url 'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY' \
+  --out-dir ./anchor-programs \
+  --rps 20
+
+# Step 2: Check which have on-chain IDL
+bun run cli:check-idl -- \
+  --rpc-url 'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY' \
+  --out-dir ./anchor-programs \
+  --batch-size 100 \
+  --rps 20
+
+# Step 3: Filter CSV for programs with IDL
+grep ",true," ./anchor-programs/program_idl_status.csv > anchor_programs_with_idl.csv
+```
+
+### Quick Survey of Top 100 Programs
+
+```bash
+bun run cli:full -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --out-dir ./top100 \
+  --max-programs 100 \
+  --rps 3 \
+  --batch-size 20
+```
+
+### Check Specific DeFi Protocols
+
+```bash
+cat > defi-programs.json << EOF
+[
+  "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD",
+  "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+  "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
+]
+EOF
+
+bun run cli:check-idl -- \
+  --rpc-url 'https://api.mainnet-beta.solana.com' \
+  --input-file ./defi-programs.json \
+  --out-dir ./defi-idl-check
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Scanning Programs" icon="radar" href="/cli/scanning-programs">
+    Learn how to discover programs on-chain
+  </Card>
+  <Card title="Checking IDL" icon="file-check" href="/cli/checking-idl">
+    Verify which programs have Anchor IDL
+  </Card>
+</CardGroup>

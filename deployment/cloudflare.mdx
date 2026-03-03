@@ -1,0 +1,289 @@
+---
+title: Cloudflare Setup
+description: Configure Cloudflare Workers, Pages, D1 database, and KV namespaces for Orquestra
+---
+
+## Worker Deployment
+
+The Worker serves as the API backend for Orquestra, handling authentication, IDL management, and API routing.
+
+### Create Worker
+
+The worker is automatically deployed when you run:
+
+```bash
+wrangler deploy --env production
+```
+
+### Configure Routes
+
+Routes are defined in `wrangler.toml`:
+
+```toml
+[env.production]
+name = "orquestra-worker-prod"
+routes = [
+  { pattern = "api.orquestra.dev/*", zone_name = "orquestra.dev" }
+]
+```
+
+This routes all `api.orquestra.dev/*` requests to your worker.
+
+### Worker Configuration
+
+From `wrangler.toml`:
+
+```toml
+name = "orquestra"
+account_id = "568525424c1d0ac88c8baa71f52d3e45"
+main = "packages/worker/src/index.ts"
+compatibility_date = "2024-01-01"
+```
+
+## Pages Deployment
+
+Cloudflare Pages hosts the static frontend built with React and Vite.
+
+### Deploy Frontend
+
+Deploy the frontend build:
+
+```bash
+# Build the frontend
+npm run build:frontend
+
+# Deploy to Pages
+wrangler pages deploy packages/frontend/dist \
+  --project-name orquestra-frontend \
+  --branch main
+```
+
+### Configure Custom Domain
+
+<Steps>
+  <Step title="Navigate to Pages Project">
+    Go to Cloudflare Dashboard → Pages → orquestra-frontend
+  </Step>
+  
+  <Step title="Add Custom Domain">
+    Click Custom domains → Set up a custom domain
+  </Step>
+  
+  <Step title="Configure DNS">
+    Add CNAME record: `orquestra.dev` → `orquestra-frontend.pages.dev`
+  </Step>
+</Steps>
+
+## D1 Database Setup
+
+D1 is Cloudflare's SQLite database for storing users, projects, IDL versions, and more.
+
+### Create Database
+
+Create production and development databases:
+
+```bash
+# Production database
+wrangler d1 create orquestra-prod
+
+# Development database
+wrangler d1 create orquestra-dev
+```
+
+You'll receive output like:
+
+```
+✅ Successfully created DB 'orquestra-prod'
+
+[[d1_databases]]
+binding = "DB"
+database_name = "orquestra-prod"
+database_id = "7308ceeb-9f86-4948-a1bf-916d21078788"
+```
+
+### Configure in wrangler.toml
+
+Add the database IDs to your `wrangler.toml`:
+
+```toml
+# Production database
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "orquestra-prod"
+database_id = "7308ceeb-9f86-4948-a1bf-916d21078788"
+
+# Development database
+[[env.development.d1_databases]]
+binding = "DB"
+database_name = "orquestra-dev"
+database_id = "38a17d10-e419-44f9-834c-1cbf64d81d66"
+```
+
+### Database Schema
+
+The schema includes:
+
+- **users** - User accounts from GitHub OAuth
+- **projects** - User-created projects with program IDs
+- **idl_versions** - Versioned IDL files for each project
+- **api_keys** - API keys for authentication
+- **project_socials** - Social links for projects
+- **known_addresses** - Labeled Solana addresses
+
+See [Database Migrations](/deployment/database-migrations) for running migrations.
+
+## KV Namespace Setup
+
+KV namespaces provide key-value storage for IDL files and caching.
+
+### Create KV Namespaces
+
+Create two KV namespaces:
+
+```bash
+# IDLS namespace for storing IDL files
+wrangler kv:namespace create IDLS
+wrangler kv:namespace create IDLS --preview
+
+# CACHE namespace for API response caching
+wrangler kv:namespace create CACHE
+wrangler kv:namespace create CACHE --preview
+```
+
+Output:
+
+```
+🌀 Creating namespace with title "orquestra-IDLS"
+✨ Success!
+Add the following to your configuration file:
+id = "f9bd92f54c1149fba41a7c6c3ef20760"
+preview_id = "ab1db1fef1094ee89aa4b7876c1b7d38"
+```
+
+### Configure in wrangler.toml
+
+Add the namespace IDs:
+
+```toml
+# Production KV namespaces
+[[env.production.kv_namespaces]]
+binding = "IDLS"
+id = "f9bd92f54c1149fba41a7c6c3ef20760"
+
+[[env.production.kv_namespaces]]
+binding = "CACHE"
+id = "00550acbdd544169b8af0e5eb7a34bdd"
+
+# Development KV namespaces
+[[env.development.kv_namespaces]]
+binding = "IDLS"
+id = "ab1db1fef1094ee89aa4b7876c1b7d38"
+
+[[env.development.kv_namespaces]]
+binding = "CACHE"
+id = "5868c26cb04949fd88ff75c0d315d475"
+```
+
+### KV Usage in Orquestra
+
+**IDLS Namespace**: Stores complete IDL JSON files, using program ID as the key.
+
+**CACHE Namespace**: Caches API responses for public endpoints to reduce D1 queries.
+
+## DNS Configuration
+
+### Add DNS Records
+
+<AccordionGroup>
+  <Accordion title="API Subdomain (Worker)">
+    **Type**: CNAME  
+    **Name**: `api`  
+    **Target**: Your worker route or `orquestra.workers.dev`  
+    **Proxy**: Enabled (orange cloud)
+  </Accordion>
+  
+  <Accordion title="Frontend (Pages)">
+    **Type**: CNAME  
+    **Name**: `@` (or `www`)  
+    **Target**: `orquestra-frontend.pages.dev`  
+    **Proxy**: Enabled (orange cloud)
+  </Accordion>
+</AccordionGroup>
+
+### SSL/TLS Settings
+
+Ensure SSL/TLS is configured:
+
+1. Go to SSL/TLS → Overview
+2. Set encryption mode to **Full (strict)**
+3. Enable **Always Use HTTPS**
+4. Enable **Automatic HTTPS Rewrites**
+
+## Verification
+
+After setup, verify each component:
+
+```bash
+# Check worker
+curl https://api.orquestra.dev/health
+# Expected: {"status":"ok",...}
+
+# Check Pages
+curl -I https://orquestra.dev
+# Expected: HTTP/2 200
+
+# Check D1 database
+wrangler d1 info orquestra-prod
+# Shows database info
+
+# List KV namespaces
+wrangler kv:namespace list
+# Shows IDLS and CACHE namespaces
+```
+
+## Troubleshooting
+
+### Worker Not Responding
+
+```bash
+# Check worker logs
+wrangler tail --env production
+
+# Verify worker is deployed
+wrangler deployments list --name orquestra-worker-prod
+```
+
+### Database Connection Issues
+
+```bash
+# Verify database exists
+wrangler d1 info orquestra-prod
+
+# Check database ID matches wrangler.toml
+wrangler d1 list
+```
+
+### KV Namespace Errors
+
+```bash
+# List all namespaces
+wrangler kv:namespace list
+
+# Verify IDs match wrangler.toml configuration
+```
+
+<Warning>
+Always use `--env production` when working with production resources to avoid accidentally modifying development data.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="key" href="/deployment/environment-variables">
+    Configure secrets and environment variables
+  </Card>
+  
+  <Card title="Database Migrations" icon="database" href="/deployment/database-migrations">
+    Run migrations to initialize your database
+  </Card>
+</CardGroup>

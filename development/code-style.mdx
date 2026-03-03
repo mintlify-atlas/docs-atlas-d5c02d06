@@ -1,0 +1,521 @@
+---
+title: 'Code Style & Standards'
+description: 'TypeScript best practices, ESLint rules, formatting guidelines, and commit conventions'
+---
+
+Orquestra follows strict code style and quality standards to maintain a clean, consistent, and maintainable codebase.
+
+## TypeScript Best Practices
+
+### Type Safety
+
+Orquestra uses TypeScript in **strict mode** for maximum type safety.
+
+**Always provide explicit types:**
+
+```typescript
+// Good
+export function validateApiKey(key: string): boolean {
+  return key.length === 32;
+}
+
+// Bad
+export function validateApiKey(key) {
+  return key.length === 32;
+}
+```
+
+**Use interfaces for object shapes:**
+
+```typescript
+// Good
+interface Project {
+  id: string;
+  name: string;
+  idl: IdlDefinition;
+  createdAt: Date;
+}
+
+// Bad
+const project = {
+  id: "123",
+  name: "My Project",
+  // No type definition
+};
+```
+
+**Avoid `any` - use `unknown` for truly unknown types:**
+
+```typescript
+// Good
+function processData(data: unknown): ProcessedData {
+  if (typeof data === 'object' && data !== null) {
+    // Type guard before using
+    return transformData(data as RawData);
+  }
+  throw new Error('Invalid data');
+}
+
+// Bad
+function processData(data: any) {
+  return transformData(data);
+}
+```
+
+### Shared Types
+
+Define shared types in `packages/shared/src/types.ts` for cross-package usage:
+
+```typescript
+// packages/shared/src/types.ts
+export interface ApiKeyResponse {
+  key: string;
+  name: string;
+  createdAt: string;
+}
+
+// Use in worker
+import type { ApiKeyResponse } from '@shared/types';
+
+export async function createApiKey(): Promise<ApiKeyResponse> {
+  // Implementation
+}
+
+// Use in frontend
+import type { ApiKeyResponse } from '@shared/types';
+
+const keys = await fetch('/api/keys').then(r => r.json() as ApiKeyResponse[]);
+```
+
+### Function Return Types
+
+Always specify return types for functions:
+
+```typescript
+// Good
+export async function fetchProject(id: string): Promise<Project | null> {
+  const result = await db.query('SELECT * FROM projects WHERE id = ?', [id]);
+  return result.length > 0 ? result[0] : null;
+}
+
+// Bad
+export async function fetchProject(id: string) {
+  const result = await db.query('SELECT * FROM projects WHERE id = ?', [id]);
+  return result.length > 0 ? result[0] : null;
+}
+```
+
+### Null Safety
+
+Handle null/undefined explicitly:
+
+```typescript
+// Good
+function getUserName(user: User | null): string {
+  return user?.name ?? 'Anonymous';
+}
+
+// Good - explicit check
+if (project !== null && project !== undefined) {
+  console.log(project.name);
+}
+
+// Bad - assumes non-null
+function getUserName(user: User | null): string {
+  return user.name; // TypeScript error in strict mode
+}
+```
+
+### TypeScript Configuration
+
+Key settings from `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,                           // Enable all strict checks
+    "noImplicitAny": true,                   // No implicit any types
+    "strictNullChecks": true,                // Strict null checking
+    "strictFunctionTypes": true,             // Strict function types
+    "forceConsistentCasingInFileNames": true // Enforce consistent casing
+  }
+}
+```
+
+## ESLint Configuration
+
+### Rules
+
+Orquestra uses ESLint with TypeScript support. Key rules from `.eslintrc.json`:
+
+```json
+{
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "rules": {
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_"
+      }
+    ],
+    "@typescript-eslint/explicit-function-return-types": [
+      "warn",
+      {
+        "allowExpressions": true
+      }
+    ]
+  }
+}
+```
+
+### Running ESLint
+
+```bash
+# Check for lint errors
+bun run lint
+
+# Auto-fix issues
+bun run lint:fix
+```
+
+### Common Patterns
+
+**Unused variables:**
+
+```typescript
+// Good - prefix unused parameters with underscore
+function handler(_req: Request, res: Response): Response {
+  return res.json({ status: 'ok' });
+}
+
+// Bad - unused parameter without prefix
+function handler(req: Request, res: Response): Response {
+  return res.json({ status: 'ok' });
+}
+```
+
+**Explicit return types:**
+
+```typescript
+// Good
+export const getProject = async (id: string): Promise<Project> => {
+  return await db.projects.findById(id);
+};
+
+// Allowed - expression context
+const projects = data.map(item => transform(item));
+```
+
+## Prettier Formatting
+
+### Configuration
+
+Orquestra uses Prettier for consistent code formatting. Settings from `.prettierrc`:
+
+```json
+{
+  "printWidth": 100,
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "useTabs": false,
+  "arrowParens": "always",
+  "endOfLine": "lf"
+}
+```
+
+### Formatting Rules
+
+**Use single quotes:**
+
+```typescript
+// Good
+const message = 'Hello, world!';
+import { createProject } from './services';
+
+// Bad
+const message = "Hello, world!";
+import { createProject } from "./services";
+```
+
+**Always use semicolons:**
+
+```typescript
+// Good
+const name = 'Orquestra';
+export default router;
+
+// Bad
+const name = 'Orquestra'
+export default router
+```
+
+**Trailing commas (ES5 style):**
+
+```typescript
+// Good
+const config = {
+  name: 'orquestra',
+  version: '1.0.0',
+  features: ['api', 'frontend'],
+};
+
+// Bad
+const config = {
+  name: 'orquestra',
+  version: '1.0.0',
+  features: ['api', 'frontend']
+};
+```
+
+**Arrow function parens:**
+
+```typescript
+// Good
+const double = (x) => x * 2;
+const greet = (name) => `Hello, ${name}`;
+
+// Bad
+const double = x => x * 2;
+const greet = name => `Hello, ${name}`;
+```
+
+### Running Prettier
+
+```bash
+# Format all code
+bun run format
+
+# Format specific files
+bun run prettier --write "packages/frontend/src/**/*.tsx"
+```
+
+## Commit Message Format
+
+Orquestra follows the **Conventional Commits** specification for clear, structured commit history.
+
+### Format
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+### Types
+
+- **feat**: New feature
+- **fix**: Bug fix
+- **docs**: Documentation changes
+- **style**: Code style changes (formatting, no logic change)
+- **refactor**: Code refactoring (no functional change)
+- **perf**: Performance improvements
+- **test**: Adding or updating tests
+- **chore**: Maintenance tasks (dependencies, build, etc.)
+- **ci**: CI/CD changes
+
+### Examples
+
+**Simple feature:**
+
+```bash
+git commit -m "feat: add transaction builder validation"
+```
+
+**Bug fix with scope:**
+
+```bash
+git commit -m "fix(api): correct API key validation logic"
+```
+
+**Breaking change:**
+
+```bash
+git commit -m "feat(api): redesign project creation endpoint
+
+BREAKING CHANGE: The /api/projects endpoint now requires an idl field in the request body."
+```
+
+**Multi-line commit:**
+
+```bash
+git commit -m "refactor(worker): simplify auth middleware
+
+Extracted common authentication logic into reusable functions.
+Improved error handling and added better error messages.
+
+Closes #142"
+```
+
+**Documentation update:**
+
+```bash
+git commit -m "docs: update deployment guide with Cloudflare setup"
+```
+
+**Dependency update:**
+
+```bash
+git commit -m "chore: upgrade @solana/web3.js to v1.87.0"
+```
+
+### Best Practices
+
+**Do:**
+
+- Use imperative mood ("add" not "added" or "adds")
+- Keep subject line under 72 characters
+- Capitalize the subject line
+- Don't end subject with a period
+- Separate subject from body with blank line
+- Wrap body at 72 characters
+- Use body to explain *what* and *why*, not *how*
+- Reference issues and PRs in footer
+
+**Don't:**
+
+- Make vague commits like "fix stuff" or "update"
+- Mix multiple unrelated changes in one commit
+- Commit commented-out code
+- Include sensitive information
+
+### Commit Examples
+
+**Good commits:**
+
+```bash
+feat(frontend): add project sharing functionality
+fix(worker): prevent duplicate API key generation
+docs(api): add examples for all endpoints
+refactor(shared): extract validation utilities
+test(worker): add integration tests for auth flow
+perf(frontend): optimize bundle size with code splitting
+```
+
+**Bad commits:**
+
+```bash
+update stuff
+fixed bug
+WIP
+changes
+asdf
+```
+
+## Code Documentation
+
+### JSDoc Comments
+
+Document public APIs and complex functions:
+
+```typescript
+/**
+ * Validates a Solana address format
+ * @param address - Base58 encoded Solana address
+ * @returns true if valid, false otherwise
+ * @example
+ * isValidSolanaAddress('11111111111111111111111111111111') // true
+ * isValidSolanaAddress('invalid') // false
+ */
+export function isValidSolanaAddress(address: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+}
+```
+
+### Inline Comments
+
+Explain *why*, not *what*:
+
+```typescript
+// Good - explains reasoning
+// Use base58 encoding to reduce URL length and improve readability
+const shortId = encodeBase58(uuid);
+
+// Bad - states the obvious
+// Encode the UUID using base58
+const shortId = encodeBase58(uuid);
+```
+
+### Complex Logic
+
+Break down complex operations:
+
+```typescript
+/**
+ * Process IDL and generate REST API endpoints
+ */
+export function generateEndpoints(idl: Idl): ApiEndpoint[] {
+  // Extract all instruction definitions from the IDL
+  const instructions = idl.instructions;
+
+  // Map each instruction to a REST endpoint
+  const endpoints = instructions.map((instruction) => {
+    // Convert snake_case to kebab-case for URL paths
+    const path = instruction.name.replace(/_/g, '-');
+
+    // Generate request/response schemas from instruction arguments
+    const schema = generateSchema(instruction);
+
+    return {
+      path: `/api/${path}`,
+      method: 'POST',
+      schema,
+    };
+  });
+
+  return endpoints;
+}
+```
+
+## Pre-commit Checklist
+
+Before committing, ensure:
+
+- [ ] Code follows TypeScript best practices
+- [ ] All ESLint warnings are resolved
+- [ ] Code is formatted with Prettier
+- [ ] Type checking passes: `bun run type-check`
+- [ ] Tests pass: `bun test`
+- [ ] Commit message follows Conventional Commits
+- [ ] No console.log or debugger statements
+- [ ] No commented-out code
+- [ ] Documentation updated if needed
+
+## Editor Setup
+
+### VS Code
+
+Recommended extensions:
+
+- ESLint
+- Prettier
+- TypeScript and JavaScript Language Features
+
+Add to `.vscode/settings.json`:
+
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "typescript.tsdk": "node_modules/typescript/lib"
+}
+```
+
+### WebStorm / IntelliJ IDEA
+
+1. Enable Prettier: `Settings → Languages & Frameworks → JavaScript → Prettier`
+2. Enable ESLint: `Settings → Languages & Frameworks → JavaScript → Code Quality Tools → ESLint`
+3. Format on save: `Settings → Tools → Actions on Save`
+
+---
+
+Following these code style standards ensures a consistent, maintainable, and high-quality codebase.

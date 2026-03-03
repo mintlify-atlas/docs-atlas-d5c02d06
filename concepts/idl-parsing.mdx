@@ -1,0 +1,392 @@
+---
+title: 'IDL Parsing'
+description: 'Learn how Orquestra parses and validates Anchor IDL files'
+icon: 'code'
+---
+
+## Overview
+
+Orquestra's IDL parser validates and processes Anchor IDL files to generate type-safe APIs. It supports both old and new Anchor IDL formats (v0.29+).
+
+## Anchor IDL Format
+
+Anchor IDL (Interface Definition Language) describes a Solana program's interface:
+
+```json
+{
+  "version": "0.1.0",
+  "name": "my_program",
+  "metadata": {
+    "version": "0.1.0",
+    "name": "my_program"
+  },
+  "instructions": [
+    {
+      "name": "initialize",
+      "accounts": [
+        { "name": "user", "isMut": true, "isSigner": true },
+        { "name": "systemProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "amount", "type": "u64" }
+      ]
+    }
+  ],
+  "accounts": [],
+  "types": [],
+  "events": [],
+  "errors": []
+}
+```
+
+<Info>
+  Orquestra supports both Anchor IDL spec 0.1.0 (new format) and legacy formats.
+</Info>
+
+## IDL Structure
+
+The IDL parser works with the following structure:
+
+```typescript packages/worker/src/services/idl-parser.ts
+interface AnchorIDL {
+  version: string
+  name: string
+  metadata?: any
+  instructions: AnchorInstruction[]
+  accounts?: AnchorAccount[]
+  types?: AnchorType[]
+  events?: AnchorEvent[]
+  errors?: AnchorError[]
+}
+
+interface AnchorInstruction {
+  name: string
+  accounts: AnchorAccountMeta[]
+  args: AnchorArg[]
+  docs?: string[]
+}
+```
+
+## Validation Process
+
+The parser validates IDL structure before processing:
+
+```typescript packages/worker/src/services/idl-parser.ts
+export function validateIDL(idlJson: unknown): ValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (!idlJson || typeof idlJson !== 'object') {
+    return { valid: false, errors: ['IDL must be a JSON object'], warnings }
+  }
+
+  const idl = idlJson as Record<string, unknown>
+  
+  // Required fields
+  const metadata = idl.metadata as Record<string, unknown> | undefined
+  if (!metadata?.version || typeof metadata.version !== 'string') {
+    errors.push('IDL must have a "version" field (string)')
+  }
+
+  if (!metadata?.name || typeof metadata.name !== 'string') {
+    errors.push('IDL must have a "name" field (string)')
+  }
+
+  if (!idl.instructions || !Array.isArray(idl.instructions)) {
+    errors.push('IDL must have an "instructions" array')
+  } else {
+    // Validate each instruction
+    for (let i = 0; i < idl.instructions.length; i++) {
+      const ix = idl.instructions[i] as Record<string, unknown>
+      if (!ix.name || typeof ix.name !== 'string') {
+        errors.push(`Instruction at index ${i} must have a "name" field`)
+      }
+      if (!ix.accounts || !Array.isArray(ix.accounts)) {
+        errors.push(`Instruction "${ix.name || i}" must have an "accounts" array`)
+      }
+      if (!ix.args || !Array.isArray(ix.args)) {
+        errors.push(`Instruction "${ix.name || i}" must have an "args" array`)
+      }
+    }
+  }
+
+  return { valid: errors.length === 0, errors, warnings }
+}
+```
+
+<Warning>
+  If validation fails, the IDL upload is rejected with detailed error messages.
+</Warning>
+
+## Type Resolution
+
+The parser resolves complex types to human-readable strings:
+
+```typescript packages/worker/src/services/idl-parser.ts
+export function resolveType(type: any): string {
+  if (typeof type === 'string') {
+    return type // Primitive types: u8, u64, bool, etc.
+  }
+
+  if (type.vec) {
+    return `Vec<${resolveType(type.vec)}>`
+  }
+
+  if (type.option) {
+    return `Option<${resolveType(type.option)}>`
+  }
+
+  if (type.defined) {
+    // Support both old format { defined: "Name" } 
+    // and new format { defined: { name: "Name" } }
+    if (typeof type.defined === 'string') {
+      return type.defined
+    }
+    if (typeof type.defined === 'object' && type.defined.name) {
+      return type.defined.name
+    }
+    return JSON.stringify(type.defined)
+  }
+
+  if (type.array) {
+    const [innerType, size] = type.array
+    return `[${resolveType(innerType)}; ${size}]`
+  }
+
+  if (type.tuple) {
+    return `(${type.tuple.map(resolveType).join(', ')})`
+  }
+
+  return JSON.stringify(type)
+}
+```
+
+### Type Examples
+
+| IDL Type | Resolved Type |
+|----------|---------------|
+| `"u64"` | `u64` |
+| `{ "vec": "u8" }` | `Vec<u8>` |
+| `{ "option": "pubkey" }` | `Option<pubkey>` |
+| `{ "array": ["u8", 32] }` | `[u8; 32]` |
+| `{ "defined": "MyStruct" }` | `MyStruct` |
+
+## Account Meta Normalization
+
+Orquestra supports both old and new Anchor IDL account formats:
+
+```typescript packages/worker/src/services/idl-parser.ts
+interface AnchorAccountMeta {
+  name: string
+  // Old format
+  isMut?: boolean
+  isSigner?: boolean
+  isOptional?: boolean
+  // New format (Anchor IDL spec 0.1.0)
+  writable?: boolean
+  signer?: boolean
+  optional?: boolean
+  address?: string
+  pda?: {
+    seeds: Array<{ kind: string; value?: any; path?: string }>
+    program?: { kind: string; value?: any }
+  }
+}
+
+export function normalizeAccountMeta(acc: AnchorAccountMeta) {
+  return {
+    name: acc.name,
+    isMut: acc.isMut ?? acc.writable ?? false,
+    isSigner: acc.isSigner ?? acc.signer ?? false,
+    isOptional: acc.isOptional ?? acc.optional ?? false,
+    address: acc.address,
+    pda: acc.pda,
+  }
+}
+```
+
+<Accordion title="Old vs New Format">
+  **Old Format** (pre-0.29):
+  ```json
+  { "name": "user", "isMut": true, "isSigner": true }
+  ```
+
+  **New Format** (v0.29+):
+  ```json
+  { "name": "user", "writable": true, "signer": true }
+  ```
+
+  Orquestra normalizes both to a consistent internal format.
+</Accordion>
+
+## Struct Field Normalization
+
+Handles both named and tuple struct formats:
+
+```typescript packages/worker/src/services/idl-parser.ts
+export function normalizeField(
+  field: { name: string; type: any } | string,
+  index: number,
+): { name: string; type: any } {
+  if (typeof field === 'string') {
+    return { name: `field_${index}`, type: field }
+  }
+  if (typeof field === 'object' && field !== null && !('name' in field)) {
+    // Field is an unnamed type object like { vec: "u8" }
+    return { name: `field_${index}`, type: field }
+  }
+  return field as { name: string; type: any }
+}
+```
+
+## Defined Type Resolution
+
+Resolves custom struct types recursively:
+
+```typescript packages/worker/src/services/idl-parser.ts
+export function resolveDefinedType(
+  idl: AnchorIDL,
+  typeName: string,
+): { name: string; kind: string; fields: ResolvedField[] } | null {
+  const typeDef = lookupType(idl, typeName)
+  if (!typeDef) return null
+
+  const kind = typeDef.type?.kind || 'unknown'
+
+  if (kind === 'struct' && typeDef.type?.fields) {
+    const fields: ResolvedField[] = typeDef.type.fields.map((f, i) => {
+      const normalized = normalizeField(f, i)
+      const definedName = getDefinedTypeName(normalized.type)
+      const nested = definedName ? resolveDefinedType(idl, definedName) : null
+      return {
+        name: normalized.name,
+        type: normalized.type,
+        typeStr: resolveType(normalized.type),
+        isDefinedType: !!definedName,
+        nestedFields: nested?.fields || null,
+      }
+    })
+    return { name: typeName, kind, fields }
+  }
+
+  return { name: typeName, kind, fields: [] }
+}
+```
+
+<Info>
+  Nested structs are resolved recursively to provide complete type information in the API.
+</Info>
+
+## PDA Seed Extraction
+
+Extracts PDA (Program Derived Address) seeds from account metadata:
+
+```typescript packages/worker/src/services/idl-parser.ts
+export function extractPDASeeds(account: AnchorAccountMeta): string[] {
+  if (!account.pda?.seeds) return []
+  return account.pda.seeds.map((seed) => {
+    if (seed.kind === 'const') {
+      // New format: value is a byte array, decode as UTF-8
+      if (Array.isArray(seed.value)) {
+        try {
+          const decoded = String.fromCharCode(...seed.value)
+          return `const:${decoded}`
+        } catch {
+          return `const:[${seed.value.join(',')}]`
+        }
+      }
+      return `const:${seed.value || ''}`
+    }
+    if (seed.kind === 'account') return `account:${seed.path || seed.value || ''}`
+    if (seed.kind === 'arg') return `arg:${seed.path || seed.value || ''}`
+    return `unknown:${seed.path || seed.value || ''}`
+  })
+}
+```
+
+## Default Values
+
+Generates default values for testing and documentation:
+
+```typescript packages/worker/src/services/idl-parser.ts
+export function getDefaultValue(type: any, idl?: AnchorIDL): any {
+  if (typeof type === 'string') {
+    switch (type) {
+      case 'u8': case 'u16': case 'u32': case 'u64': case 'u128':
+      case 'i8': case 'i16': case 'i32': case 'i64': case 'i128':
+        return 0
+      case 'f32': case 'f64':
+        return 0.0
+      case 'bool':
+        return false
+      case 'string':
+        return ''
+      case 'publicKey':
+      case 'pubkey':
+        return '11111111111111111111111111111111'
+      case 'bytes':
+        return []
+      default:
+        return null
+    }
+  }
+
+  if (type.vec) return []
+  if (type.option) return null
+  if (type.array) return []
+
+  // Handle defined types — return default object with all struct fields
+  const definedName = getDefinedTypeName(type)
+  if (definedName && idl) {
+    const resolved = resolveDefinedType(idl, definedName)
+    if (resolved && resolved.fields.length > 0) {
+      const obj: Record<string, any> = {}
+      for (const field of resolved.fields) {
+        obj[field.name] = getDefaultValue(field.type, idl)
+      }
+      return obj
+    }
+  }
+
+  return null
+}
+```
+
+<Note>
+  Default values are used in the API Explorer to pre-fill forms and provide examples.
+</Note>
+
+## Parsing Result
+
+The parser returns structured metadata:
+
+```typescript packages/worker/src/services/idl-parser.ts
+export interface ParsedIDL {
+  idl: AnchorIDL
+  programName: string
+  version: string
+  instructionCount: number
+  accountCount: number
+  errorCount: number
+  eventCount: number
+}
+
+export function parseIDL(idlJson: unknown): ParsedIDL {
+  const validation = validateIDL(idlJson)
+  if (!validation.valid) {
+    throw new Error(`Invalid IDL: ${validation.errors.join(', ')}`)
+  }
+
+  const idl = idlJson as AnchorIDL
+
+  return {
+    idl,
+    programName: idl.metadata.name,
+    version: idl.metadata.version,
+    instructionCount: idl.instructions?.length || 0,
+    accountCount: idl.accounts?.length || 0,
+    errorCount: idl.errors?.length || 0,
+    eventCount: idl.events?.length || 0,
+  }
+}
+```

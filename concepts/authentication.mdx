@@ -1,0 +1,436 @@
+---
+title: 'Authentication'
+description: 'Learn how Orquestra handles authentication with GitHub OAuth and JWT tokens'
+icon: 'shield-halved'
+---
+
+## Overview
+
+Orquestra uses GitHub OAuth for user authentication and JWT tokens for API authorization. This provides a secure, passwordless authentication system.
+
+## GitHub OAuth Flow
+
+### Step 1: Initiate OAuth
+
+User clicks "Sign in with GitHub" and is redirected:
+
+```typescript packages/worker/src/routes/auth.ts
+// GitHub OAuth - Start login
+app.get('/github', authRateLimit, (c) => {
+  const clientId = c.env?.GITHUB_OAUTH_ID || ''
+  const redirectUri = `${c.env?.API_BASE_URL || 'http://localhost:8787'}/auth/github/callback`
+  const scope = 'user:email read:user'
+
+  const authUrl = new URL('https://github.com/login/oauth/authorize')
+  authUrl.searchParams.set('client_id', clientId)
+  authUrl.searchParams.set('redirect_uri', redirectUri)
+  authUrl.searchParams.set('scope', scope)
+  authUrl.searchParams.set('allow_signup', 'true')
+
+  return c.redirect(authUrl.toString())
+})
+```
+
+<Info>
+  OAuth scope `user:email read:user` requests access to the user's email and basic profile.
+</Info>
+
+### Step 2: Handle Callback
+
+GitHub redirects back with an authorization code:
+
+```typescript packages/worker/src/routes/auth.ts
+app.get('/github/callback', async (c) => {
+  const code = c.req.query('code')
+
+  if (!code) {
+    return c.redirect(`${c.env?.FRONTEND_URL}/auth/error?message=No+code+provided`)
+  }
+
+  try {
+    // Exchange code for access token
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: c.env?.GITHUB_OAUTH_ID,
+        client_secret: c.env?.GITHUB_OAUTH_SECRET,
+        code,
+      }),
+    })
+
+    const tokenData = await tokenResponse.json()
+
+    if (tokenData.error || !tokenData.access_token) {
+      return c.redirect(
+        `${c.env?.FRONTEND_URL}/auth/error?message=${encodeURIComponent(
+          tokenData.error_description || 'Failed to get access token'
+        )}`
+      )
+    }
+
+    // Continue to fetch user info...
+  } catch (err) {
+    console.error('GitHub OAuth error:', err)
+    return c.redirect(`${c.env?.FRONTEND_URL}/auth/error?message=Authentication+failed`)
+  }
+})
+```
+
+### Step 3: Fetch User Data
+
+Retrieve user information from GitHub API:
+
+```typescript packages/worker/src/routes/auth.ts
+// Fetch user info from GitHub
+const userResponse = await fetch('https://api.github.com/user', {
+  headers: {
+    Authorization: `Bearer ${tokenData.access_token}`,
+    Accept: 'application/json',
+    'User-Agent': 'orquestra',
+  },
+})
+
+const githubUser = await userResponse.json()
+
+// Fetch primary email if not available
+let email = githubUser.email
+if (!email) {
+  const emailResponse = await fetch('https://api.github.com/user/emails', {
+    headers: {
+      Authorization: `Bearer ${tokenData.access_token}`,
+      Accept: 'application/json',
+      'User-Agent': 'orquestra',
+    },
+  })
+  const emails = await emailResponse.json()
+  const primary = emails.find((e) => e.primary && e.verified)
+  email = primary?.email || emails[0]?.email || `${githubUser.login}@users.noreply.github.com`
+}
+```
+
+<Note>
+  GitHub users can hide their email. Orquestra fetches the primary verified email as a fallback.
+</Note>
+
+### Step 4: Upsert User
+
+Create or update user in the database:
+
+```typescript packages/worker/src/routes/auth.ts
+// Upsert user in database
+const db = c.env?.DB
+let user = await db
+  ?.prepare('SELECT * FROM users WHERE github_id = ?')
+  .bind(githubUser.id)
+  .first()
+
+if (!user) {
+  const userId = generateId()
+  await db
+    ?.prepare(
+      'INSERT INTO users (id, github_id, username, email, avatar_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    )
+    .bind(
+      userId, 
+      githubUser.id, 
+      githubUser.login, 
+      email, 
+      githubUser.avatar_url, 
+      getCurrentTimestamp(), 
+      getCurrentTimestamp()
+    )
+    .run()
+
+  user = {
+    id: userId,
+    github_id: githubUser.id,
+    username: githubUser.login,
+    email,
+    avatar_url: githubUser.avatar_url,
+  }
+} else {
+  // Update existing user info
+  await db
+    ?.prepare('UPDATE users SET username = ?, email = ?, avatar_url = ?, updated_at = ? WHERE github_id = ?')
+    .bind(githubUser.login, email, githubUser.avatar_url, getCurrentTimestamp(), githubUser.id)
+    .run()
+}
+```
+
+## JWT Token Generation
+
+Orquestra generates JWT tokens using Web Crypto API:
+
+```typescript packages/worker/src/services/jwt.ts
+export interface JWTPayload {
+  sub: string        // user ID
+  username: string
+  iat: number        // issued at
+  exp: number        // expiration
+}
+
+export async function generateJWT(
+  payload: Omit<JWTPayload, 'iat' | 'exp'>,
+  secret: string,
+  expiresInSeconds: number = 7 * 24 * 60 * 60 // 7 days default
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000)
+
+  const fullPayload: JWTPayload = {
+    ...payload,
+    iat: now,
+    exp: now + expiresInSeconds,
+  }
+
+  const header = { alg: 'HS256', typ: 'JWT' }
+
+  const headerEncoded = base64UrlEncode(JSON.stringify(header))
+  const payloadEncoded = base64UrlEncode(JSON.stringify(fullPayload))
+
+  const signingInput = `${headerEncoded}.${payloadEncoded}`
+
+  const key = await getKey(secret)
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(signingInput))
+
+  const signatureEncoded = base64UrlEncode(new Uint8Array(signature))
+
+  return `${signingInput}.${signatureEncoded}`
+}
+```
+
+<Info>
+  JWT tokens use HMAC-SHA256 for signing, compatible with Cloudflare Workers' Web Crypto API.
+</Info>
+
+### HMAC Key Creation
+
+```typescript packages/worker/src/services/jwt.ts
+async function getKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign', 'verify']
+  )
+}
+```
+
+### Base64URL Encoding
+
+```typescript packages/worker/src/services/jwt.ts
+function base64UrlEncode(data: Uint8Array | string): string {
+  const str = typeof data === 'string' ? data : String.fromCharCode(...data)
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
+
+function base64UrlDecode(str: string): string {
+  str = str.replace(/-/g, '+').replace(/_/g, '/')
+  while (str.length % 4) str += '='
+  return atob(str)
+}
+```
+
+<Accordion title="Why Base64URL?">
+  Standard Base64 uses `+`, `/`, and `=` characters which are not URL-safe. Base64URL replaces
+  them with `-`, `_`, and removes padding for safe use in URLs and HTTP headers.
+</Accordion>
+
+## JWT Token Verification
+
+Verify and decode JWT tokens:
+
+```typescript packages/worker/src/services/jwt.ts
+export async function verifyJWT(token: string, secret: string): Promise<JWTPayload> {
+  const parts = token.split('.')
+  if (parts.length !== 3) {
+    throw new Error('Invalid token format')
+  }
+
+  const [headerEncoded, payloadEncoded, signatureEncoded] = parts
+  const signingInput = `${headerEncoded}.${payloadEncoded}`
+
+  // Verify signature
+  const key = await getKey(secret)
+  const signatureStr = base64UrlDecode(signatureEncoded)
+  const signatureBytes = new Uint8Array(signatureStr.length)
+  for (let i = 0; i < signatureStr.length; i++) {
+    signatureBytes[i] = signatureStr.charCodeAt(i)
+  }
+
+  const valid = await crypto.subtle.verify('HMAC', key, signatureBytes, encoder.encode(signingInput))
+  if (!valid) {
+    throw new Error('Invalid token signature')
+  }
+
+  // Decode payload
+  const payload: JWTPayload = JSON.parse(base64UrlDecode(payloadEncoded))
+
+  // Check expiration
+  const now = Math.floor(Date.now() / 1000)
+  if (payload.exp && payload.exp < now) {
+    throw new Error('Token expired')
+  }
+
+  return payload
+}
+```
+
+<Warning>
+  Expired tokens are rejected. Clients must re-authenticate via GitHub OAuth to obtain a new token.
+</Warning>
+
+## Return Token to Client
+
+After successful authentication:
+
+```typescript packages/worker/src/routes/auth.ts
+// Generate JWT
+const jwt = await generateJWT(
+  { sub: user.id as string, username: user.username as string },
+  c.env?.JWT_SECRET || 'dev-secret',
+  7 * 24 * 60 * 60 // 7 days
+)
+
+// Redirect to frontend with token
+const frontendUrl = c.env?.FRONTEND_URL || 'http://localhost:5173'
+return c.redirect(`${frontendUrl}/auth/callback?token=${jwt}`)
+```
+
+The frontend stores the token in localStorage and includes it in API requests:
+
+```javascript
+// Store token
+localStorage.setItem('token', token)
+
+// Include in requests
+fetch('/api/projects', {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+})
+```
+
+## API Keys
+
+For programmatic access, users can generate API keys:
+
+<Note>
+  API keys are not implemented in the provided source code, but would follow a similar pattern:
+  1. User generates API key via dashboard
+  2. Key is stored hashed in database
+  3. Clients include key in `X-API-Key` header
+  4. Middleware verifies key against database
+</Note>
+
+## Protected Routes
+
+The auth middleware protects private endpoints:
+
+```typescript
+import { authMiddleware } from '../middleware/auth'
+
+// Get current user profile
+app.get('/me', authMiddleware, async (c) => {
+  const userId = c.get('userId') as string
+  const db = c.env?.DB
+
+  const user = await db
+    ?.prepare('SELECT id, username, email, avatar_url, created_at FROM users WHERE id = ?')
+    .bind(userId)
+    .first()
+
+  if (!user) {
+    return c.json({ error: 'User not found' }, 404)
+  }
+
+  return c.json({ user })
+})
+```
+
+The middleware:
+1. Extracts JWT from `Authorization` header
+2. Verifies token signature and expiration
+3. Loads user from database
+4. Attaches `userId` to request context
+5. Rejects invalid/expired tokens with 401
+
+## Rate Limiting
+
+Auth endpoints are rate-limited to prevent abuse:
+
+```typescript packages/worker/src/routes/auth.ts
+import { authRateLimit } from '../middleware/rate-limit'
+
+app.get('/github', authRateLimit, (c) => {
+  // Rate limit: 10 requests per minute per IP
+})
+```
+
+<Info>
+  Rate limiting is typically implemented using Cloudflare KV to track request counts per IP.
+</Info>
+
+## Logout
+
+Logout is client-side only (token removal):
+
+```typescript packages/worker/src/routes/auth.ts
+app.post('/logout', (c) => {
+  return c.json({ message: 'Logged out successfully' })
+})
+```
+
+The frontend removes the token from localStorage:
+
+```javascript
+localStorage.removeItem('token')
+```
+
+<Note>
+  Since JWT tokens are stateless, the server cannot invalidate them. Tokens expire after 7 days.
+  For immediate revocation, implement a token blacklist in KV.
+</Note>
+
+## Security Considerations
+
+### Token Storage
+
+- **Frontend**: Store JWT in `localStorage` or `sessionStorage`
+- **Never**: Store in cookies without `httpOnly` flag (XSS risk)
+- **Alternative**: Use `httpOnly` cookies for enhanced security
+
+### Secret Management
+
+```bash
+# Environment variables in wrangler.toml
+[vars]
+GITHUB_OAUTH_ID = "your_client_id"
+
+# Secrets via Wrangler CLI
+wrangler secret put GITHUB_OAUTH_SECRET
+wrangler secret put JWT_SECRET
+```
+
+<Warning>
+  Never commit secrets to version control. Use Cloudflare's secret management.
+</Warning>
+
+### HTTPS Only
+
+All authentication endpoints require HTTPS in production. Cloudflare automatically provides TLS termination.
+
+### CORS Configuration
+
+Restrict OAuth redirects to known frontend origins:
+
+```typescript
+const ALLOWED_ORIGINS = [
+  'https://app.orquestra.dev',
+  'http://localhost:5173' // dev only
+]
+```

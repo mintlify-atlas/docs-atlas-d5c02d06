@@ -1,0 +1,437 @@
+---
+title: Database Migrations
+description: Initialize and manage D1 database schema for Orquestra
+---
+
+## Migration Overview
+
+Orquestra uses D1, Cloudflare's SQLite database, with versioned SQL migration files. Migrations are located in the `migrations/` directory.
+
+### Migration Files
+
+1. **001_initial_schema.sql** - Core schema (users, projects, IDL versions)
+2. **002_indexes.sql** - Database indexes for query optimization
+3. **003_custom_docs_and_known_addresses.sql** - Custom documentation and labeled addresses
+
+## Running Migrations
+
+### Production Migration
+
+Run migrations against your production database:
+
+```bash
+# Run initial schema
+wrangler d1 execute orquestra-prod \
+  --file ./migrations/001_initial_schema.sql \
+  --remote
+
+# Add indexes
+wrangler d1 execute orquestra-prod \
+  --file ./migrations/002_indexes.sql \
+  --remote
+
+# Add custom docs and known addresses
+wrangler d1 execute orquestra-prod \
+  --file ./migrations/003_custom_docs_and_known_addresses.sql \
+  --remote
+```
+
+<Warning>
+Always use `--remote` flag for production. Without it, migrations run against local database only.
+</Warning>
+
+### Development Migration
+
+Run migrations locally for development:
+
+```bash
+# Using npm script (runs migrations 001 and 002)
+npm run db:migrate:dev
+
+# Or manually with --local flag
+wrangler d1 execute DB \
+  --local \
+  --file ./migrations/001_initial_schema.sql
+
+wrangler d1 execute DB \
+  --local \
+  --file ./migrations/002_indexes.sql
+
+wrangler d1 execute DB \
+  --local \
+  --file ./migrations/003_custom_docs_and_known_addresses.sql
+```
+
+### Run All Migrations
+
+Execute all migration files in order:
+
+```bash
+# Production
+for file in ./migrations/*.sql; do
+  echo "Running $file..."
+  wrangler d1 execute orquestra-prod --file "$file" --remote
+done
+
+# Development
+for file in ./migrations/*.sql; do
+  echo "Running $file..."
+  wrangler d1 execute DB --file "$file" --local
+done
+```
+
+## Schema Overview
+
+### Users Table
+
+Stores user accounts from GitHub OAuth:
+
+```sql
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  github_id INTEGER UNIQUE NOT NULL,
+  username TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  avatar_url TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Indexes**:
+- `idx_users_github_id` on `github_id`
+- `idx_users_username` on `username`
+
+### Projects Table
+
+Stores user-created projects with Solana program IDs:
+
+```sql
+CREATE TABLE IF NOT EXISTS projects (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  program_id TEXT NOT NULL,
+  is_public BOOLEAN DEFAULT TRUE,
+  custom_docs TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, program_id)
+);
+```
+
+**Indexes**:
+- `idx_projects_user_id` on `user_id`
+- `idx_projects_program_id` on `program_id`
+- `idx_projects_is_public` on `is_public`
+
+### IDL Versions Table
+
+Versioned IDL files for each project:
+
+```sql
+CREATE TABLE IF NOT EXISTS idl_versions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  idl_json TEXT NOT NULL,
+  cpi_md TEXT,
+  version INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+```
+
+**Indexes**:
+- `idx_idl_versions_project_id` on `project_id`
+- `idx_idl_versions_created_at` on `created_at`
+
+### API Keys Table
+
+API keys for project authentication:
+
+```sql
+CREATE TABLE IF NOT EXISTS api_keys (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  key TEXT UNIQUE NOT NULL,
+  last_used DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+```
+
+**Indexes**:
+- `idx_api_keys_project_id` on `project_id`
+- `idx_api_keys_key` on `key`
+
+### Project Socials Table
+
+Social links for projects:
+
+```sql
+CREATE TABLE IF NOT EXISTS project_socials (
+  id TEXT PRIMARY KEY,
+  project_id TEXT UNIQUE NOT NULL,
+  twitter TEXT,
+  discord TEXT,
+  telegram TEXT,
+  github TEXT,
+  website TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+```
+
+**Index**:
+- `idx_project_socials_project_id` on `project_id`
+
+### Known Addresses Table
+
+Labeled Solana public keys for projects:
+
+```sql
+CREATE TABLE IF NOT EXISTS known_addresses (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  address TEXT NOT NULL,
+  description TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+```
+
+**Index**:
+- `idx_known_addresses_project_id` on `project_id`
+
+## Database Management
+
+### View Database Info
+
+```bash
+# Get database details
+wrangler d1 info orquestra-prod
+
+# List all databases
+wrangler d1 list
+```
+
+### Execute SQL Queries
+
+```bash
+# Run a single SQL command
+wrangler d1 execute orquestra-prod \
+  --command "SELECT COUNT(*) FROM users" \
+  --remote
+
+# Run multiple commands from a file
+wrangler d1 execute orquestra-prod \
+  --file ./query.sql \
+  --remote
+```
+
+### Query Database
+
+Open an interactive SQL shell:
+
+```bash
+# Local database
+wrangler d1 execute DB --command ".tables" --local
+
+# Remote database
+wrangler d1 execute orquestra-prod --command ".schema users" --remote
+```
+
+### Export Database
+
+```bash
+# Export to SQL file (local only)
+wrangler d1 execute DB \
+  --command ".dump" \
+  --local > backup.sql
+```
+
+### Backup Database
+
+Cloudflare automatically backs up D1 databases. For manual backups:
+
+```bash
+# Create manual backup
+wrangler d1 backup create orquestra-prod
+
+# List backups
+wrangler d1 backup list orquestra-prod
+
+# Restore from backup
+wrangler d1 backup restore orquestra-prod <backup-id>
+```
+
+## Migration Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always test migrations locally first">
+    ```bash
+    # Test on local database
+    wrangler d1 execute DB --file ./migrations/new_migration.sql --local
+    
+    # Verify with queries
+    wrangler d1 execute DB --command ".schema" --local
+    
+    # Then apply to production
+    wrangler d1 execute orquestra-prod --file ./migrations/new_migration.sql --remote
+    ```
+  </Accordion>
+  
+  <Accordion title="Keep migrations idempotent">
+    Use `IF NOT EXISTS` and `IF EXISTS` clauses:
+    
+    ```sql
+    -- Safe to run multiple times
+    CREATE TABLE IF NOT EXISTS new_table (...);
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS new_column TEXT;
+    CREATE INDEX IF NOT EXISTS idx_name ON table(column);
+    ```
+  </Accordion>
+  
+  <Accordion title="Version migrations sequentially">
+    Name files with incrementing numbers:
+    - `001_initial_schema.sql`
+    - `002_indexes.sql`
+    - `003_custom_docs_and_known_addresses.sql`
+    - `004_your_new_migration.sql`
+  </Accordion>
+  
+  <Accordion title="Use transactions for complex migrations">
+    ```sql
+    BEGIN TRANSACTION;
+    
+    -- Multiple related changes
+    ALTER TABLE projects ADD COLUMN new_field TEXT;
+    UPDATE projects SET new_field = 'default' WHERE new_field IS NULL;
+    
+    COMMIT;
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Migration Fails with "table already exists"
+
+The migration was already run. Use `IF NOT EXISTS`:
+
+```sql
+CREATE TABLE IF NOT EXISTS table_name (...);
+```
+
+### Foreign Key Constraint Failed
+
+Ensure parent tables exist before creating child tables:
+
+```bash
+# Run migrations in order
+wrangler d1 execute orquestra-prod --file ./migrations/001_initial_schema.sql --remote
+wrangler d1 execute orquestra-prod --file ./migrations/002_indexes.sql --remote
+```
+
+### Cannot Connect to Database
+
+Verify database exists and ID is correct:
+
+```bash
+# List databases
+wrangler d1 list
+
+# Check wrangler.toml has correct database_id
+cat wrangler.toml | grep database_id
+```
+
+### Reset Local Database
+
+Completely reset local development database:
+
+```bash
+# Drop all tables
+npm run db:reset
+
+# Re-run all migrations
+npm run db:migrate:dev
+```
+
+## Production Migration Commands
+
+Complete production setup:
+
+```bash
+# 1. Create production database (if not exists)
+wrangler d1 create orquestra-prod
+
+# 2. Run all migrations in order
+wrangler d1 execute orquestra-prod \
+  --file ./migrations/001_initial_schema.sql \
+  --remote
+
+wrangler d1 execute orquestra-prod \
+  --file ./migrations/002_indexes.sql \
+  --remote
+
+wrangler d1 execute orquestra-prod \
+  --file ./migrations/003_custom_docs_and_known_addresses.sql \
+  --remote
+
+# 3. Verify schema
+wrangler d1 execute orquestra-prod \
+  --command ".tables" \
+  --remote
+
+# 4. Verify indexes
+wrangler d1 execute orquestra-prod \
+  --command "SELECT name FROM sqlite_master WHERE type='index'" \
+  --remote
+```
+
+## Monitoring
+
+### Query Performance
+
+Monitor D1 performance in Cloudflare Dashboard:
+- Navigate to **Workers & Pages** → **D1**
+- Select your database
+- View metrics: queries/second, latency, errors
+
+### Database Size
+
+```bash
+# Get database info including size
+wrangler d1 info orquestra-prod
+```
+
+### Query Statistics
+
+Enable logging in your worker code to track slow queries:
+
+```typescript
+const start = Date.now()
+const results = await c.env.DB.prepare('SELECT ...').all()
+const duration = Date.now() - start
+if (duration > 100) {
+  console.warn(`Slow query: ${duration}ms`)
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment Overview" icon="rocket" href="/deployment/overview">
+    Complete deployment guide
+  </Card>
+  
+  <Card title="Environment Variables" icon="key" href="/deployment/environment-variables">
+    Configure secrets and variables
+  </Card>
+</CardGroup>

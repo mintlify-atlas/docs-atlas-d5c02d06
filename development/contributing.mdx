@@ -1,0 +1,395 @@
+---
+title: 'Contributing Guide'
+description: 'Learn how to contribute to Orquestra - from forking to pull requests'
+---
+
+Thank you for your interest in contributing to Orquestra! We welcome contributions of all kinds - bug fixes, new features, documentation improvements, tests, and UI/UX enhancements.
+
+## Getting Started
+
+### Fork and Clone
+
+1. **Fork the repository** on GitHub by clicking the "Fork" button
+
+2. **Clone your fork** locally:
+
+```bash
+git clone https://github.com/yourusername/orquestra.git
+cd orquestra
+```
+
+3. **Add upstream remote** to stay in sync:
+
+```bash
+git remote add upstream https://github.com/orquestra/orquestra.git
+```
+
+### Development Environment Setup
+
+1. **Install dependencies** using Bun:
+
+```bash
+bun install
+```
+
+2. **Set up environment variables:**
+
+```bash
+cp .env.example .env.local
+# Edit .env.local with your local configuration
+```
+
+3. **Start the development server:**
+
+```bash
+bun run dev
+```
+
+This starts both the frontend (localhost:5173) and worker (localhost:8787).
+
+## Contribution Workflow
+
+### Creating Feature Branches
+
+Always create a new branch for your work. Use descriptive names that reflect the change:
+
+```bash
+# For new features
+git checkout -b feature/transaction-builder-ui
+
+# For bug fixes
+git checkout -b fix/api-key-validation
+
+# For documentation
+git checkout -b docs/update-deployment-guide
+
+# For refactoring
+git checkout -b refactor/simplify-auth-middleware
+```
+
+### Making Changes
+
+1. **Write your code** following our [code style guidelines](/development/code-style)
+2. **Add tests** for new features and bug fixes
+3. **Run checks locally** before pushing:
+
+```bash
+# Type checking
+bun run type-check
+
+# Linting
+bun run lint
+
+# Tests
+bun test
+```
+
+4. **Commit your changes** using [Conventional Commits](/development/code-style#commit-message-format):
+
+```bash
+git add .
+git commit -m "feat: add transaction builder validation"
+```
+
+### Pull Request Process
+
+1. **Push to your fork:**
+
+```bash
+git push origin feature/your-feature-name
+```
+
+2. **Create a Pull Request** on GitHub with:
+   - **Descriptive title** using conventional commit format
+   - **Clear description** explaining:
+     - What problem does this solve?
+     - How does it solve it?
+     - Any breaking changes?
+   - **Link related issues:**
+     ```markdown
+     Closes #123
+     Relates to #456
+     ```
+
+3. **Request review** from maintainers
+
+4. **Address feedback** from reviewers promptly
+
+5. **Keep your branch updated** with the base branch:
+
+```bash
+git fetch upstream
+git rebase upstream/main
+git push --force-with-lease origin feature/your-feature-name
+```
+
+### PR Review Criteria
+
+**What reviewers look for:**
+
+- Clear, descriptive commit messages
+- Well-documented code with comments
+- Comprehensive test coverage
+- No breaking changes (unless necessary and discussed)
+- Follows project conventions
+- Updated documentation
+
+**What to avoid:**
+
+- Large monolithic commits
+- Undocumented code
+- Missing tests
+- Breaking changes without discussion
+- Inconsistent style
+- Outdated documentation
+
+## Contribution Areas
+
+### Bug Fixes
+
+Found a bug? We appreciate bug fixes!
+
+1. **Search existing issues** to avoid duplicates
+2. **Create an issue** describing the bug (if not exists)
+3. **Create a fix** with tests that verify the bug is resolved
+4. **Link the issue** in your PR description: `Fixes #123`
+
+### New Features
+
+Want to add a new feature?
+
+1. **Discuss first** by creating a feature request issue
+2. **Get consensus** from maintainers before starting work
+3. **Write a design document** for complex features
+4. **Implement with tests** and documentation
+5. **Update relevant docs** (README, API docs, etc.)
+
+### Documentation
+
+Documentation improvements are always welcome!
+
+- Fix typos and grammatical errors
+- Clarify confusing sections
+- Add missing examples
+- Update outdated information
+- Improve code comments
+
+### Tests
+
+Help us improve test coverage:
+
+- Add missing unit tests
+- Add integration tests
+- Improve test clarity and maintainability
+- Add edge case tests
+
+### UI/UX Improvements
+
+Enhance the user experience:
+
+- Improve accessibility
+- Better error messages
+- Enhanced visual design
+- Performance optimizations
+- Responsive design improvements
+
+## Project Structure
+
+Understanding the codebase organization:
+
+```
+orquestra/
+├── packages/
+│   ├── frontend/          # React UI (Cloudflare Pages)
+│   │   ├── src/
+│   │   │   ├── components/  # Reusable UI components
+│   │   │   ├── pages/       # Page components
+│   │   │   └── lib/         # Utilities and helpers
+│   │   └── package.json
+│   ├── worker/            # Hono API (Cloudflare Workers)
+│   │   ├── src/
+│   │   │   ├── routes/      # API endpoints
+│   │   │   ├── middleware/  # Request middleware
+│   │   │   └── services/    # Business logic
+│   │   └── package.json
+│   ├── shared/            # Shared types & utilities
+│   │   └── src/
+│   │       ├── types.ts     # TypeScript types
+│   │       └── utils.ts     # Shared utilities
+│   └── cli/               # CLI tools
+├── migrations/            # D1 database schemas
+├── scripts/               # Build and utility scripts
+├── .github/workflows/     # CI/CD pipelines
+└── docs/                  # Documentation
+```
+
+## Common Development Tasks
+
+### Working on Frontend
+
+```bash
+# Start development server
+bun run dev:frontend
+
+# Build for production
+bun run build:frontend
+
+# Lint frontend code
+bun run lint --prefix packages/frontend
+```
+
+Key directories:
+- Components: `packages/frontend/src/components/`
+- Pages: `packages/frontend/src/pages/`
+- Styling: Tailwind CSS (`tailwind.config.js`)
+
+### Working on Backend
+
+```bash
+# Start development server
+bun run dev:worker
+
+# Build for production
+bun run build:worker
+
+# Lint worker code
+bun run lint --prefix packages/worker
+```
+
+Key directories:
+- Routes: `packages/worker/src/routes/`
+- Middleware: `packages/worker/src/middleware/`
+- Services: `packages/worker/src/services/`
+
+### Working on Shared Types
+
+```bash
+# Build shared package
+bun run build --prefix packages/shared
+
+# Type check across workspace
+bun run type-check
+```
+
+Key files:
+- Types: `packages/shared/src/types.ts`
+- Utils: `packages/shared/src/utils.ts`
+
+### Database Development
+
+```bash
+# Apply migrations locally
+bun run db:migrate:dev
+
+# Seed sample data
+bun run db:seed
+
+# Reset database (dev only)
+bun run db:reset
+```
+
+## Feature Development Workflow
+
+### 1. Design Phase
+
+- Write design document for complex features
+- Discuss with maintainers before major changes
+- Update architecture docs if needed
+
+### 2. Implementation Phase
+
+- Create feature branch
+- Write code with tests
+- Update types in shared package
+- Document new APIs
+
+### 3. Testing Phase
+
+- Run local tests: `bun test`
+- Test in dev environment
+- Verify no regressions
+
+### 4. Documentation Phase
+
+- Update README if user-facing
+- Add/update API documentation
+- Add comments for complex logic
+
+### 5. Review Phase
+
+- Push to your fork
+- Create pull request
+- Address reviewer feedback
+- Squash commits if requested
+
+### 6. Merge Phase
+
+- Maintainer merges to develop
+- Tested in staging
+- Merged to main for production
+
+## Reporting Issues
+
+### Bug Reports
+
+Include:
+
+- Clear description of the bug
+- Steps to reproduce
+- Expected behavior
+- Actual behavior
+- Environment details (OS, Node version, browser, etc.)
+- Screenshots or logs if applicable
+
+**Example:**
+
+```markdown
+**Description:** API key validation fails for valid keys
+
+**Steps to reproduce:**
+1. Create a new API key
+2. Use it in Authorization header
+3. Make request to /api/projects
+
+**Expected:** Request succeeds with 200 status
+**Actual:** Request fails with 401 Unauthorized
+
+**Environment:**
+- OS: macOS 14.1
+- Bun: 1.0.0
+- Browser: Chrome 120
+```
+
+### Feature Requests
+
+Include:
+
+- Use case / problem it solves
+- Proposed solution
+- Alternatives considered
+- Any breaking changes
+- Willingness to contribute implementation
+
+## Getting Help
+
+Need assistance?
+
+- **GitHub Issues:** Bug reports and feature requests
+- **GitHub Discussions:** Q&A and general discussions
+- **Documentation:** Check our [documentation](/introduction)
+
+## Code of Conduct
+
+- Be respectful and inclusive
+- Be professional in all interactions
+- Welcome newcomers and help them get started
+- Respect differing viewpoints and experiences
+- Report violations to maintainers
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the MIT License.
+
+---
+
+Thank you for contributing to Orquestra!
